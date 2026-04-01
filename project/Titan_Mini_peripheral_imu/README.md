@@ -1,4 +1,4 @@
-# LSM6DS3TR-C 6-Axis IMU Sensor User Guide
+# 6-Axis IMU Sensor Example Guide
 
 [**中文**](./README_zh.md) | **English**
 

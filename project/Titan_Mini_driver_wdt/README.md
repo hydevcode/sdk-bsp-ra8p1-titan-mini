@@ -1,4 +1,4 @@
-# RA8P1 Titan Mini Board Watchdog Timer (WDT) Driver Documentation
+# Watchdog Timer (WDT) Driver Example Guide
 
 [**中文**](README_zh.md) | **English**
 

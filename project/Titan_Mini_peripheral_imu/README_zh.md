@@ -1,4 +1,4 @@
-# LSM6DS3TR-C 六轴 IMU 传感器使用说明
+# 六轴 IMU 传感器示例说明
 
 **中文** | [**English**](./README.md)
 

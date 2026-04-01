@@ -1,4 +1,4 @@
-# RTC Driver Example
+# RTC Driver Example Guide
 
 [**Chinese**](README_zh.md) | **English**
 
