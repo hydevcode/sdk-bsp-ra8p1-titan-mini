@@ -308,4 +308,4 @@ void alarm_sample(void)
 
 After compiling and flashing the program, power on and run `alarm_sample` in the terminal to see the effect
 
-![image1](image1.png)
+![image1](figures/image1.png)
