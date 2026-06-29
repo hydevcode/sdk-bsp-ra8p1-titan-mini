@@ -127,171 +127,73 @@ rt_err_t rt_device_set_rx_indicate(rt_device_t dev, rt_err_t (*rx_ind)(rt_device
 ```
 Titan_Mini_peripheral_imu/
 ├── src/
-│   └── hal_entry.c          # 主程序入口
+│   └── hal_entry.c          # 主程序入口 (RGB LED 闪灯演示)
 └── packages/
     └── lsm6ds3tr/           # LSM6DS3TR-C 驱动包
         ├── lsm6ds3tr-c_reg.h    # 寄存器定义和驱动接口
         ├── lsm6ds3tr-c_reg.c    # 寄存器级驱动实现
-        └── lsm6ds3tr-c_port.c   # 平台移植层
+        └── lsm6ds3tr-c_port.c   # 平台移植层 + INIT_APP_EXPORT 自动初始化 + MSH imu 命令
 ```
 
 ## 使用说明
 
-### 1. 初始化流程
+### 1. 工作模式
 
-系统初始化时需要初始化 I2C 接口和 IMU 传感器：
+本工程采用 **开机自动初始化 + MSH 命令运行** 的模式：
 
-```c
-#include <rtthread.h>
-#include "lsm6ds3tr-c_reg.h"
+- **开机时**：RT-Thread 启动后由 `INIT_APP_EXPORT` 自动完成 LSM6DS3TR-C 的初始化（含 ID 检测、复位、ODR/满量程/滤波配置），用户无需手动 `init`。
+- **开机后**：主线程只跑 RGB LED 闪灯演示，IMU 数据读取**不自动运行**，需要用户在 msh 输入命令才会读传感器。
 
-/* I2C 配置 */
-#define LSM6DS3TR_C_I2C_BUS    "i2c2"
-#define LSM6DS3TR_C_I2C_ADDR    0x6A  /* SA0引脚接GND */
+这样既保证开机流程不被 IMU 采样死循环阻塞，也避免用户忘记初始化。
 
-void hal_entry(void)
-{
-    stmdev_ctx_t imu_ctx = {0};
+### 2. MSH 命令
 
-    /* 初始化 I2C 接口 */
-    struct rt_i2c_bus_device *i2c_bus = rt_i2c_bus_device_find(LSM6DS3TR_C_I2C_BUS);
-    if (i2c_bus == RT_NULL)
-    {
-        rt_kprintf("I2C bus not found!\n");
-        return;
-    }
+烧录后,在串口终端（msh />）输入以下命令：
 
-    /* 配置设备读写接口 */
-    imu_ctx.handle    = i2c_bus;
-    imu_ctx.write_reg = platform_write;
-    imu_ctx.read_reg  = platform_read;
+| 命令 | 说明 |
+|------|------|
+| `imu` | 读取并打印一次传感器信息（含姿态解析） |
+| `imu start [ms]` | 开始周期性采样，可选周期（默认 1000ms，最小 50ms） |
+| `imu stop` | 停止周期性采样 |
 
-    /* 初始化传感器 */
-    if (lsm6ds3tr_c_init(&imu_ctx) != LSM6DS3TR_C_OK)
-    {
-        rt_kprintf("LSM6DS3TR-C initialization failed!\n");
-        return;
-    }
+示例：
 
-    /* 配置加速度计 */
-    lsm6ds3tr_c_xl_full_scale_set(&imu_ctx, LSM6DS3TR_C_2g);          /* ±2g */
-    lsm6ds3tr_c_xl_data_rate_set(&imu_ctx, LSM6DS3TR_C_ODR_104Hz);  /* 104Hz */
-
-    /* 配置陀螺仪 */
-    lsm6ds3tr_c_gy_full_scale_set(&imu_ctx, LSM6DS3TR_C_250dps);    /* ±250dps */
-    lsm6ds3tr_c_gy_data_rate_set(&imu_ctx, LSM6DS3TR_C_ODR_104Hz);  /* 104Hz */
-
-    rt_kprintf("LSM6DS3TR-C initialized successfully!\n");
-
-    /* 主循环 - 读取传感器数据 */
-    while (1)
-    {
-        /* 读取加速度计数据 */
-        lsm6ds3tr_c_axis3bit16_t acc_raw;
-        lsm6ds3tr_c_acceleration_raw_get(&imu_ctx, &acc_raw);
-
-        /* 读取陀螺仪数据 */
-        lsm6ds3tr_c_axis3bit16_t gyro_raw;
-        lsm6ds3tr_c_angular_rate_raw_get(&imu_ctx, &gyro_raw);
-
-        /* 数据转换为物理单位 */
-        float acc_x = acc_raw.i16bit[0] / 32768.0f * 2.0f;  /* 2g 量程 */
-        float acc_y = acc_raw.i16bit[1] / 32768.0f * 2.0f;
-        float acc_z = acc_raw.i16bit[2] / 32768.0f * 2.0f;
-
-        float gyro_x = gyro_raw.i16bit[0] / 32768.0f * 250.0f;  /* 250dps 量程 */
-        float gyro_y = gyro_raw.i16bit[1] / 32768.0f * 250.0f;
-        float gyro_z = gyro_raw.i16bit[2] / 32768.0f * 250.0f;
-
-        /* 打印数据 */
-        rt_kprintf("ACC: X=%.3fg Y=%.3fg Z=%.3fg | GYRO: X=%.2fdps Y=%.2fdps Z=%.2fdps\n",
-                   acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z);
-
-        rt_thread_mdelay(100);  /* 10Hz 读取频率 */
-    }
-}
+```text
+msh /> imu start 500        # 每 500ms 输出一帧
+msh /> imu stop             # 停止采样
+msh /> imu                  # 单次打印
 ```
 
-### 2. I2C 平台接口实现
+### 3. 数据输出格式
 
-移植层需要实现 I2C 读写函数：
+每帧输出包含 3 轴加速度、3 轴角速度、温度，以及解析后的合矢量与姿态角：
 
-```c
-#include <rtthread.h>
-#include <rtdevice.h>
-
-/* I2C 写入 */
-int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len)
-{
-    struct rt_i2c_bus_device *i2c_bus = (struct rt_i2c_bus_device *)handle;
-    struct rt_i2c_msg msgs[2];
-
-    /* 写寄存器地址 */
-    msgs[0].addr  = LSM6DS3TR_C_I2C_ADDR;
-    msgs[0].flags = RT_I2C_WR;
-    msgs[0].buf   = &reg;
-    msgs[0].len   = 1;
-
-    /* 写数据 */
-    msgs[1].addr  = LSM6DS3TR_C_I2C_ADDR;
-    msgs[1].flags = RT_I2C_WR | RT_I2C_NO_START;
-    msgs[1].buf   = (uint8_t *)bufp;
-    msgs[1].len   = len;
-
-    if (rt_i2c_transfer(i2c_bus, msgs, 2) != 2)
-    {
-        return -1;
-    }
-    return 0;
-}
-
-/* I2C 读取 */
-int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t len)
-{
-    struct rt_i2c_bus_device *i2c_bus = (struct rt_i2c_bus_device *)handle;
-    struct rt_i2c_msg msgs[2];
-
-    /* 写寄存器地址 */
-    msgs[0].addr  = LSM6DS3TR_C_I2C_ADDR;
-    msgs[0].flags = RT_I2C_WR;
-    msgs[0].buf   = &reg;
-    msgs[0].len   = 1;
-
-    /* 读数据 */
-    msgs[1].addr  = LSM6DS3TR_C_I2C_ADDR;
-    msgs[1].flags = RT_I2C_RD;
-    msgs[1].buf   = bufp;
-    msgs[1].len   = len;
-
-    if (rt_i2c_transfer(i2c_bus, msgs, 2) != 2)
-    {
-        return -1;
-    }
-    return 0;
-}
-
-/* 延时函数 */
-void platform_delay(uint32_t ms)
-{
-    rt_thread_mdelay(ms);
-}
+```text
+------ LSM6DS3TR-C Sample ------
+Accel  (mg) : X=  -12.0  Y=   35.0  Z=  998.0  | |a|= 998.7
+Gyro   (dps): X=  0.02  Y=  -0.01  Z=   0.03  | |w|=  0.04
+Temp   (C)  :  28.45
+Tilt   (deg): pitch= -0.69  roll=  2.01  (static estimate)
+--------------------------------
 ```
 
-### 3. 数据格式转换
+- **Accel**：三轴加速度 (mg)，`|a|` 为加速度合矢量（静止时约 1000mg ≈ 1g）
+- **Gyro**：三轴角速度 (dps)，`|w|` 为角速度合矢量
+- **Temp**：板载温度 (℃)
+- **Tilt**：由重力分量估算的 pitch / roll 姿态角（仅静止时有效，动态下需结合陀螺仪做融合）
 
-传感器原始数据需要转换为物理单位：
+### 4. 初始化流程说明
 
-```c
-/* 加速度计数据转换 (假设 2g 量程) */
-int16_t acc_raw_x = 16384;  /* 原始 ADC 值 */
-float acc_x_g = (float)acc_raw_x / 32768.0f * 2.0f;  /* 转换为 g (9.8m/s²) */
-float acc_x_m_s2 = acc_x_g * 9.80665f;  /* 转换为 m/s² */
+开机自动初始化内部完成：
 
-/* 陀螺仪数据转换 (假设 250dps 量程) */
-int16_t gyro_raw_x = 1000;  /* 原始 ADC 值 */
-float gyro_x_dps = (float)gyro_raw_x / 32768.0f * 250.0f;  /* 转换为 °/s */
-float gyro_x_rad_s = gyro_x_dps * 0.017453292519943295f;  /* 转换为 rad/s */
-```
+1. 通过 I2C (`i2c1`, 7 位地址 `0x6A`) 查找设备并校验 WHO_AM I (期望 `0x6A`)
+2. 触发软件复位并等待复位完成
+3. 打开块数据更新 (BDU)
+4. 设置加速度计/陀螺仪 ODR = 12.5Hz，满量程 ±2g / ±2000dps
+5. 配置加速度计模拟滤波 + LPF2，陀螺仪带通滤波
+6. 初始化成功后打印 `[imu] auto-init OK`
+
+初始化函数 `lsm6ds3_init()` 同样导出，可在代码中手动调用（例如改 ODR 后重新初始化）。
 
 ## 配置说明
 
@@ -337,9 +239,35 @@ menuconfig BSP_USING_IMU
 
 ## 运行效果
 
-### 1. 终端输出
+### 1. 开机启动信息
 
-复位 Titan Board Mini 后终端会输出如下信息：
+复位 Titan Board Mini 后,串口首先输出系统启动和 IMU 自动初始化信息：
+
+```text
+Hello RT-Thread!
+==================================================
+Titan Mini peripheral IMU demo
+  - LED RGB blink runs on boot
+  - LSM6DS3TR-C IMU auto-init on boot, commands:
+      imu                 read & print one sample
+      imu start [ms]      start periodic sampling
+      imu stop            stop periodic sampling
+==================================================
+\ | /
+- RT -     Thread Operating System
+ / | \     5.x.x build ...
+...
+[imu] device detected, id=0x6A
+[imu] initialized: ODR=12.5Hz, FS=±2g/±2000dps
+[imu] auto-init OK, run 'imu' to read sample
+msh />
+```
+
+随后 msh 就绪，此时 LED 在跑 RGB 闪灯，IMU 待命。
+
+### 2. IMU 命令运行效果
+
+输入 `imu start 1000` 后周期性输出：
 
 ![image1](figures/image1.png)
 
