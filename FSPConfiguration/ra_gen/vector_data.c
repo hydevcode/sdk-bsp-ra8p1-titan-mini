@@ -65,8 +65,8 @@
             [58] = sci_b_uart_tei_isr, /* SCI1 TEI (Transmit end) */
             [59] = sci_b_uart_eri_isr, /* SCI1 ERI (Receive error) */
             [60] = pdm_sdet_isr, /* PDM SDET (Sound detection interrupt) */
-            [61] = pdm_dat_isr, /* PDM DAT2 (Data reception interrupt channel 2) */
-            [62] = pdm_err_isr, /* PDM ERR2 (Error detection interrupt channel 2) */
+            [61] = pdm_err_isr, /* PDM ERR2 (Error detection interrupt channel 2) */
+            [62] = dmac_int_isr, /* DMAC1 INT (DMAC1 transfer end) */
             [63] = gpt_counter_overflow_isr, /* GPT0 COUNTER OVERFLOW (Overflow) */
             [64] = glcdc_line_detect_isr, /* GLCDC LINE DETECT (Specified line) */
             [65] = vin_status_isr, /* VIN IRQ (Interrupt Request) */
@@ -142,8 +142,8 @@
             [58] = BSP_PRV_VECT_ENUM(EVENT_SCI1_TEI,FIXED), /* SCI1 TEI (Transmit end) */
             [59] = BSP_PRV_VECT_ENUM(EVENT_SCI1_ERI,FIXED), /* SCI1 ERI (Receive error) */
             [60] = BSP_PRV_VECT_ENUM(EVENT_PDM_SDET,FIXED), /* PDM SDET (Sound detection interrupt) */
-            [61] = BSP_PRV_VECT_ENUM(EVENT_PDM_DAT2,FIXED), /* PDM DAT2 (Data reception interrupt channel 2) */
-            [62] = BSP_PRV_VECT_ENUM(EVENT_PDM_ERR2,FIXED), /* PDM ERR2 (Error detection interrupt channel 2) */
+            [61] = BSP_PRV_VECT_ENUM(EVENT_PDM_ERR2,FIXED), /* PDM ERR2 (Error detection interrupt channel 2) */
+            [62] = BSP_PRV_VECT_ENUM(EVENT_DMAC1_INT,FIXED), /* DMAC1 INT (DMAC1 transfer end) */
             [63] = BSP_PRV_VECT_ENUM(EVENT_GPT0_COUNTER_OVERFLOW,FIXED), /* GPT0 COUNTER OVERFLOW (Overflow) */
             [64] = BSP_PRV_VECT_ENUM(EVENT_GLCDC_LINE_DETECT,FIXED), /* GLCDC LINE DETECT (Specified line) */
             [65] = BSP_PRV_VECT_ENUM(EVENT_VIN_IRQ,FIXED), /* VIN IRQ (Interrupt Request) */

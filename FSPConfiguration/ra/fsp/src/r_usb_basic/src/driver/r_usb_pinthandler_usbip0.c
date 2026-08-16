@@ -33,6 +33,18 @@ extern TX_QUEUE g_pcd_mbx_hdl;
  ******************************************************************************/
 
 /******************************************************************************
+ * usb_paud hook (weak): called from the USB ISR right after a BEMP
+ * (isochronous IN transfer completion) is recorded, so the PAUD app can
+ * re-arm the next ISO IN packet immediately instead of at the next RTOS tick.
+ ******************************************************************************/
+#if (BSP_CFG_RTOS == 0)
+void usb_pstd_bemp_notify (void) __attribute__((weak));
+void usb_pstd_bemp_notify (void)
+{
+}
+#endif /* (BSP_CFG_RTOS == 0) */
+
+/******************************************************************************
  * Function Name   : usb_pstd_usb_handler
  * Description     : USB interrupt routine. Analyze which USB interrupt occurred
  *               : and send message to PCD task.
@@ -74,6 +86,12 @@ void usb_pstd_usb_handler (void)
 
     /* Write count up */
     g_usb_pstd_usb_int.wp = (uint8_t) ((uint8_t) (g_usb_pstd_usb_int.wp + 1) % USB_INT_BUFSIZE);
+
+    /* Wake the PAUD app when an isochronous IN transfer completed (BEMP) */
+    if (USB_INT_BEMP == g_usb_pstd_usb_int.buf[(uint8_t) (g_usb_pstd_usb_int.wp + USB_INT_BUFSIZE - 1U) % USB_INT_BUFSIZE].type)
+    {
+        usb_pstd_bemp_notify();
+    }
  #endif                                /*(BSP_CFG_RTOS == 0)*/
 }
 

@@ -6,6 +6,95 @@
                      #define ADC_B_TRIGGER_ADC_B0_B      ADC_B_TRIGGER_SYNC_ELC
                      #define ADC_B_TRIGGER_ADC_B1        ADC_B_TRIGGER_SYNC_ELC
                      #define ADC_B_TRIGGER_ADC_B1_B      ADC_B_TRIGGER_SYNC_ELC
+usb_instance_ctrl_t g_basic1_ctrl;
+
+#if !defined(g_usb_descriptor)
+extern usb_descriptor_t g_usb_descriptor;
+#endif
+#define RA_NOT_DEFINED (1)
+            const usb_cfg_t g_basic1_cfg =
+            {
+                .usb_mode  = USB_MODE_PERI,
+                .usb_speed = USB_SPEED_FS,
+                .module_number = 0,
+                .type = USB_CLASS_PAUD,
+#if defined(g_usb_descriptor)
+                .p_usb_reg = g_usb_descriptor,
+#else
+                .p_usb_reg = &g_usb_descriptor,
+#endif
+                .usb_complience_cb = NULL,
+#if defined(VECTOR_NUMBER_USBFS_INT)
+                .irq       = VECTOR_NUMBER_USBFS_INT,
+#else
+                .irq       = FSP_INVALID_VECTOR,
+#endif
+#if defined(VECTOR_NUMBER_USBFS_RESUME)
+                .irq_r     = VECTOR_NUMBER_USBFS_RESUME,
+#else
+                .irq_r     = FSP_INVALID_VECTOR,
+#endif
+#if defined(VECTOR_NUMBER_USBFS_FIFO_0)
+                .irq_d0    = VECTOR_NUMBER_USBFS_FIFO_0,
+#else
+                .irq_d0    = FSP_INVALID_VECTOR,
+#endif
+#if defined(VECTOR_NUMBER_USBFS_FIFO_1)
+                .irq_d1    = VECTOR_NUMBER_USBFS_FIFO_1,
+#else
+                .irq_d1    = FSP_INVALID_VECTOR,
+#endif
+#if defined(VECTOR_NUMBER_USBHS_USB_INT_RESUME)
+                .hsirq     = VECTOR_NUMBER_USBHS_USB_INT_RESUME,
+#else
+                .hsirq     = FSP_INVALID_VECTOR,
+#endif
+#if defined(VECTOR_NUMBER_USBHS_FIFO_0)
+                .hsirq_d0  = VECTOR_NUMBER_USBHS_FIFO_0,
+#else
+                .hsirq_d0  = FSP_INVALID_VECTOR,
+#endif
+#if defined(VECTOR_NUMBER_USBHS_FIFO_1)
+                .hsirq_d1  = VECTOR_NUMBER_USBHS_FIFO_1,
+#else
+                .hsirq_d1  = FSP_INVALID_VECTOR,
+#endif
+                .ipl       = (12),
+                .ipl_r     = (12),
+                .ipl_d0    = (12),
+                .ipl_d1    = (12),
+                .hsipl     = (12),
+                .hsipl_d0  = (12),
+                .hsipl_d1  = (12),
+#if (BSP_CFG_RTOS == 0) && defined(USB_CFG_HMSC_USE)
+                .p_usb_apl_callback = NULL,
+#else
+                .p_usb_apl_callback = NULL,
+#endif
+#if defined(NULL)
+                .p_context = NULL,
+#else
+                .p_context = (void *) &NULL,
+#endif
+#if (RA_NOT_DEFINED == RA_NOT_DEFINED)
+#else
+                .p_transfer_tx = &RA_NOT_DEFINED,
+#endif
+#if (RA_NOT_DEFINED == RA_NOT_DEFINED)
+#else
+                .p_transfer_rx = &RA_NOT_DEFINED,
+#endif
+            };
+#undef RA_NOT_DEFINED
+
+/* Instance structure to use this module. */
+const usb_instance_t g_basic1 =
+{
+    .p_ctrl        = &g_basic1_ctrl,
+    .p_cfg         = &g_basic1_cfg,
+    .p_api         = &g_usb_on_usb,
+};
+
 gpt_instance_ctrl_t g_timer0_ctrl;
 #if 0
 const gpt_extended_pwm_cfg_t g_timer0_pwm_extend =
@@ -538,6 +627,49 @@ const timer_instance_t g_timer6 =
     .p_cfg         = &g_timer6_cfg,
     .p_api         = &g_timer_on_gpt
 };
+
+dmac_instance_ctrl_t g_transfer5_ctrl;
+transfer_info_t g_transfer5_info =
+{
+    .transfer_settings_word_b.dest_addr_mode = TRANSFER_ADDR_MODE_INCREMENTED,
+    .transfer_settings_word_b.repeat_area    = TRANSFER_REPEAT_AREA_SOURCE,
+    .transfer_settings_word_b.irq            = TRANSFER_IRQ_END,
+    .transfer_settings_word_b.chain_mode     = TRANSFER_CHAIN_MODE_DISABLED,
+    .transfer_settings_word_b.src_addr_mode  = TRANSFER_ADDR_MODE_FIXED,
+    .transfer_settings_word_b.size           = TRANSFER_SIZE_4_BYTE,
+    .transfer_settings_word_b.mode           = TRANSFER_MODE_BLOCK,
+    .p_dest                                  = (void *) NULL,
+    .p_src                                   = (void const *) NULL,
+    .num_blocks                              = 0,
+    .length                                  = 0,
+};
+const dmac_extended_cfg_t g_transfer5_extend =
+{
+    .offset              = 1,
+    .src_buffer_size     = 1,
+#if defined(VECTOR_NUMBER_DMAC1_INT)
+    .irq                 = VECTOR_NUMBER_DMAC1_INT,
+#else
+    .irq                 = FSP_INVALID_VECTOR,
+#endif
+    .ipl                 = (12),
+    .channel             = 1,
+    .p_callback          = pdm_rxi_dmac_isr,
+    .p_context           = &g_pdm0_ctrl,
+    .activation_source   = ELC_EVENT_PDM_DAT2,
+};
+const transfer_cfg_t g_transfer5_cfg =
+{
+    .p_info              = &g_transfer5_info,
+    .p_extend            = &g_transfer5_extend,
+};
+/* Instance structure to use this module. */
+const transfer_instance_t g_transfer5 =
+{
+    .p_ctrl        = &g_transfer5_ctrl,
+    .p_cfg         = &g_transfer5_cfg,
+    .p_api         = &g_transfer_on_dmac
+};
 pdm_instance_ctrl_t     g_pdm0_ctrl;
 
             /** PDM instance configuration */
@@ -586,14 +718,14 @@ pdm_instance_ctrl_t     g_pdm0_ctrl;
             {
                 .unit                              = 0,
                 .channel                           = 2,
-                .pcm_width                         = PDM_PCM_WIDTH_16_BITS_0_14,
+                .pcm_width                         = PDM_PCM_WIDTH_20_BITS_0_18,
                 .pcm_edge                          = PDM_INPUT_DATA_EDGE_RISE,
 
 #define RA_NOT_DEFINED (1)
-#if (RA_NOT_DEFINED == RA_NOT_DEFINED)
+#if (RA_NOT_DEFINED == g_transfer5)
                 .p_transfer_rx                         = NULL,
 #else
-                .p_transfer_rx                         = &RA_NOT_DEFINED,
+                .p_transfer_rx                         = &g_transfer5,
 #endif
 #undef RA_NOT_DEFINED
                 .p_callback                            = pdm_callback,
@@ -612,7 +744,7 @@ pdm_instance_ctrl_t     g_pdm0_ctrl;
 #else
                 .dat_irq                               = FSP_INVALID_VECTOR,
 #endif
-                .dat_ipl                               = (12),
+                .dat_ipl                               = (BSP_IRQ_DISABLED),
 
 #if defined(VECTOR_NUMBER_PDM_ERR2)
                 .err_irq                               = PDM_ERR2_IRQn,

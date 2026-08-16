@@ -4,8 +4,13 @@
 #include <stdint.h>
 #include "bsp_api.h"
 #include "common_data.h"
+#include "r_usb_basic.h"
+#include "r_usb_basic_api.h"
+#include "r_usb_paud_api.h"
 #include "r_gpt.h"
 #include "r_timer_api.h"
+#include "r_dmac.h"
+#include "r_transfer_api.h"
 #include "r_pdm_api.h"
             #include "r_pdm.h"
 #include "r_sci_b_uart.h"
@@ -13,8 +18,6 @@
 #include "r_dtc.h"
 #include "r_transfer_api.h"
 #include "r_spi_b.h"
-#include "r_dmac.h"
-#include "r_transfer_api.h"
 #include "r_ospi_b.h"
 #include "r_spi_flash_api.h"
 #include "r_wdt.h"
@@ -25,8 +28,6 @@
 #include "r_can_api.h"
 #include "r_adc_b.h"
                       #include "r_adc_api.h"
-#include "r_usb_basic.h"
-#include "r_usb_basic_api.h"
 #include "r_usb_pcdc_api.h"
 #include "r_i2s_api.h"
             #include "r_ssi.h"
@@ -37,6 +38,29 @@
 #include "r_ether_api.h"
 #include "r_rmac.h"
 FSP_HEADER
+/* Basic on USB Instance. */
+extern const usb_instance_t g_basic1;
+
+/** Access the USB instance using these structures when calling API functions directly (::p_api is not used). */
+extern usb_instance_ctrl_t g_basic1_ctrl;
+extern const usb_cfg_t g_basic1_cfg;
+
+#ifndef NULL
+void NULL(void *);
+#endif
+
+#if 0 == BSP_CFG_RTOS
+#ifndef NULL
+void NULL(usb_callback_args_t *);
+#endif
+#endif
+
+#if 2 == BSP_CFG_RTOS
+#ifndef NULL
+void NULL(usb_event_info_t *, usb_hdl_t, usb_onoff_t);
+#endif
+#endif
+/** Audio Driver on USB Instance. */
 /** Timer on GPT Instance. */
 extern const timer_instance_t g_timer0;
 
@@ -77,9 +101,22 @@ extern const timer_cfg_t g_timer6_cfg;
 #ifndef NULL
 void NULL(timer_callback_args_t * p_args);
 #endif
-#define PDM2_CALCULATED_SINCRNG_VALUE (5)
-#define PDM2_CALCULATED_SINCDEC_VALUE (124)
-#define PDM2_FILTER_SETTLING_TIME_US  (1662)
+/* Transfer on DMAC Instance. */
+extern const transfer_instance_t g_transfer5;
+
+/** Access the DMAC instance using these structures when calling API functions directly (::p_api is not used). */
+extern dmac_instance_ctrl_t g_transfer5_ctrl;
+extern const transfer_cfg_t g_transfer5_cfg;
+
+#ifndef pdm_rxi_dmac_isr
+void pdm_rxi_dmac_isr(transfer_callback_args_t * p_args);
+#endif
+/* Sinc Decimation ratio has been rounded to the nearest integer.
+ * Target Sampling Frequency: 48000 Hz
+ * Actual Sampling Frequency: 48780.5 Hz */
+#define PDM2_CALCULATED_SINCRNG_VALUE (11)
+#define PDM2_CALCULATED_SINCDEC_VALUE (41)
+#define PDM2_FILTER_SETTLING_TIME_US  (563)
 
             /** PDM Instance. */
             extern const pdm_instance_t      g_pdm0;

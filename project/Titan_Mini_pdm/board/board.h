@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-#define RA_SRAM_SIZE    512 /* The SRAM size of the chip needs to be modified */
+#define RA_SRAM_SIZE    1488 /* RA8P1 SRAM: RAM_LENGTH 0x174000 (1488 KB) */
 #define RA_SRAM_END     (0x22000000 + RA_SRAM_SIZE * 1024)
 
 #ifdef __ARMCC_VERSION

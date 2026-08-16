@@ -1,0 +1,20 @@
+import os
+from building import *
+
+cwd = GetCurrentDir()
+src = []
+root = os.path.normpath(os.path.join(cwd, '..', '..', '..', '..'))
+
+CPPPATH = [cwd,
+           root + '/ra/fsp/src/r_usb_basic/src/driver/inc',
+           root + '/ra/fsp/src/r_usb_basic/src/hw/inc']
+
+if GetDepend('BSP_USING_USB_PAUD'):
+    src += Glob('usb_paud.c')
+
+if GetDepend('BSP_USING_USB_PAUD') or GetDepend('BSP_USING_USB_PAUD_FSP'):
+    src += Glob('usb_paud_descriptor.c')
+
+objs = DefineGroup('usb_paud', src, depend = [''], CPPPATH = CPPPATH)
+
+Return('objs')

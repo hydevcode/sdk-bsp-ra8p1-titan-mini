@@ -1,10 +1,5 @@
 [
  {
-  "name": "WAVPLAYER",
-  "path": "/packages/multimedia/wavplayer",
-  "ver": "latest"
- },
- {
   "name": "OPTPARSE",
   "path": "/packages/misc/optparse",
   "ver": "latest"

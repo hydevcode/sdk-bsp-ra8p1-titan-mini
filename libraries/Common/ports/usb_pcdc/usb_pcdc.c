@@ -13,6 +13,9 @@ extern uint8_t g_apl_qualifier_descriptor[];
 extern uint8_t *g_apl_string_table[];
 extern int g_curr_led_freq;
 
+/* In USB-PAUD projects usb_paud_descriptor.c owns the shared g_usb_descriptor
+ * symbol, so keep this PCDC one out of those builds. */
+#if !defined(BSP_USING_USB_PAUD)
 const usb_descriptor_t g_usb_descriptor =
 {
  g_apl_device,                   /* Pointer to the device descriptor */
@@ -22,6 +25,7 @@ const usb_descriptor_t g_usb_descriptor =
  g_apl_string_table,             /* Pointer to the string descriptor table */
  NUM_STRING_DESCRIPTOR
 };
+#endif /* !BSP_USING_USB_PAUD */
 
 usb_status_t            usb_event;
 

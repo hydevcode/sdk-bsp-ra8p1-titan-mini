@@ -395,7 +395,16 @@ menu "Hardware Drivers Config"
             default n
             if BSP_USING_RA8P1_USB
                 config BSP_USING_USB_PCDC
-                    bool "Enable USB PCDC"
+                    bool "Enable USB PCDC class driver"
+                    default n
+
+                config BSP_USING_USB_PAUD
+                    bool "Enable USB PAUD (USB Audio Class sound card)"
+                    select BSP_USING_USB_PAUD_FSP
+                    default n
+
+                config BSP_USING_USB_PAUD_FSP
+                    bool "Use the official FSP r_usb_paud class driver."
                     default n
 
                 config BSP_USING_USB_HHID

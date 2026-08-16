@@ -743,8 +743,6 @@ static uint32_t r_pdm_fifo_read (pdm_instance_ctrl_t * p_instance_ctrl)
         if (p_data >= p_data_end)
         {
             p_data = p_instance_ctrl->p_rx_dest;
-            count++;
-            break;
         }
     }
 

@@ -263,6 +263,10 @@
 /* GD32 Drivers */
 
 /* end of GD32 Drivers */
+
+/* HPMicro SDK */
+
+/* end of HPMicro SDK */
 /* end of HAL & SDK Drivers */
 
 /* sensors drivers */
@@ -366,6 +370,8 @@
 #define BSP_UART2_TX_BUFSIZE 0
 #define BSP_USING_RA8P1_USB
 #define BSP_USING_USB_PCDC
+#define BSP_USING_USB_PAUD
+#define BSP_USING_USB_PAUD_FSP
 /* end of On-chip Peripheral Drivers */
 
 /* Board extended module Drivers */

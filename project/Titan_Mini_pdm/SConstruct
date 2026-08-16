@@ -7,7 +7,7 @@ if os.path.exists('rt-thread'):
 else:
     RTT_ROOT = os.path.normpath(os.getcwd() + '../../../rt-thread')
 
-sys.path = sys.path + [os.path.join(RTT_ROOT, 'tools')]
+sys.path.insert(0, os.path.join(RTT_ROOT, 'tools'))
 try:
     from building import *
 except Exception as e:

@@ -1,3 +1,4 @@
+
 #include <rtthread.h>
 #include "hal_data.h"
 #include <rtdevice.h>
@@ -14,249 +15,24 @@
 #define LED_ON  (0)
 #define LED_OFF (1)
 
-#define PDM_FS_HZ                   (16000U)     /* 输出采样率 16kHz */
-#define PDM_CHANNELS                (1U)         /* 单声道 */
-#define PCM_16BITS                  (16U)
-#define PCM_20BITS                  (20U)
-#define PDM_FRAME_SAMPLES           ((1<<4) * PDM_CHANNELS)  /* 16 samples per frame */
-#define PDM_ALIGN_UP(n,a)           (((uint32_t)((n) + (a) - 1U) / (uint32_t)(a)) * (uint32_t)(a))
+/* ========================== USB microphone sound card (UAC1) ========================== */
+#if defined(BSP_USING_USB_PAUD)
 
-#define PDM_RECORD_DURATION_SEC     (1U)         /* 每次录音 1 秒 */
+#include "usb_paud.h"
+#if BSP_CFG_DCACHE_ENABLED
+#include "core_cm85.h"
+#endif
 
-#define PDM_BUFFER_NUM_SAMPLES      PDM_ALIGN_UP((uint32_t)(PDM_RECORD_DURATION_SEC * PDM_FS_HZ * PDM_CHANNELS), PDM_FRAME_SAMPLES)
-
-#define AUDIO_LOOPBACK_THREAD_STACK_SIZE   (4096)
-#define AUDIO_LOOPBACK_THREAD_PRIORITY     (8)
-#define AUDIO_LOOPBACK_THREAD_TICK         (10)
-#define SOUND0_VOLUME                     (70)   /* 初始音量 70% */
-
-typedef struct
-{
-    uint32_t samples;
-    uint32_t bytes;
-} pdm_buf_size_t;
-
-#define NUM_BUFFERS  (2)
-static int32_t g_pdm_buffer[NUM_BUFFERS][PDM_BUFFER_NUM_SAMPLES] = {0};
-static int16_t g_dac_buffer[NUM_BUFFERS][PDM_BUFFER_NUM_SAMPLES * 2] = {0};
-
-static volatile bool g_stop_receive_data = false;
-static volatile pdm_error_t g_pdm_error = PDM_ERROR_NONE;
-static volatile uint8_t g_write_buffer_index = 0;
-static uint8_t g_pcm_bits = PCM_16BITS;
-
-static rt_device_t sound_dev = RT_NULL;
-
-static pdm_buf_size_t pdm_calc_buffer_from_seconds(uint8_t seconds)
-{
-    uint32_t raw = seconds * PDM_FS_HZ * PDM_CHANNELS;
-    raw = raw > UINT32_MAX ? UINT32_MAX : raw;
-    uint32_t samples = PDM_ALIGN_UP(raw, PDM_FRAME_SAMPLES);
-    uint32_t bytes = samples * sizeof(int32_t);
-    pdm_buf_size_t out = {samples, bytes};
-    return out;
-}
-
-void pdm_callback(pdm_callback_args_t *p_args)
-{
-    switch (p_args->event)
-    {
-        case PDM_EVENT_DATA:
-        {
-            g_stop_receive_data = true;
-            break;
-        }
-
-        case PDM_EVENT_SOUND_DETECTION:
-        {
-            LOG_I("PDM sound detection event");
-            break;
-        }
-
-        case PDM_EVENT_ERROR:
-        {
-            g_pdm_error = p_args->error;
-            LOG_E("PDM error: 0x%x", p_args->error);
-            break;
-        }
-
-        default:
-            break;
-    }
-}
-
-static void convert_pdm_to_dac(int32_t *pdm_data, uint32_t pdm_samples, int16_t *dac_data)
-{
-    for (uint32_t i = 0; i < pdm_samples; i++)
-    {
-        int16_t sample_16;
-        if (g_pcm_bits == PCM_20BITS)
-        {
-            sample_16 = (int16_t)(pdm_data[i] >> 4);
-        }
-        else
-        {
-            int32_t temp = pdm_data[i] << 1;
-            sample_16 = (int16_t)temp;
-        }
-
-        dac_data[i * 2] = sample_16;
-        dac_data[i * 2 + 1] = sample_16;
-    }
-}
-
-static void audio_loopback_thread_entry(void *parameter)
-{
-    FSP_PARAMETER_NOT_USED(parameter);
-
-    fsp_err_t err;
-    pdm_buf_size_t buf_size;
-
-    g_pcm_bits = (g_pdm0_cfg.pcm_width <= PDM_PCM_WIDTH_20_BITS_3_18) ? PCM_20BITS : PCM_16BITS;
-    rt_kprintf("PDM PCM bits: %d\n", g_pcm_bits);
-
-    err = R_PDM_Open(&g_pdm0_ctrl, &g_pdm0_cfg);
-    if (err != FSP_SUCCESS)
-    {
-        LOG_E("R_PDM_Open failed: %d", err);
-        return;
-    }
-
-    R_BSP_SoftwareDelay(841 + 35000, BSP_DELAY_UNITS_MICROSECONDS);
-
-    sound_dev = rt_device_find("sound0");
-    if (sound_dev != RT_NULL)
-    {
-        if (rt_device_open(sound_dev, RT_DEVICE_OFLAG_WRONLY) == RT_EOK)
-        {
-            LOG_I("Speaker opened");
-
-            struct rt_audio_caps caps;
-            caps.main_type = AUDIO_TYPE_MIXER;
-            caps.sub_type = AUDIO_MIXER_VOLUME;
-            caps.udata.value = SOUND0_VOLUME;
-            if (rt_device_control(sound_dev, AUDIO_CTL_CONFIGURE, &caps) != RT_EOK)
-            {
-                LOG_W("Failed to set speaker volume");
-            }
-            else
-            {
-                LOG_I("Speaker volume set to %d%%", SOUND0_VOLUME);
-            }
-        }
-        else
-        {
-            LOG_W("Failed to open speaker");
-            sound_dev = RT_NULL;
-        }
-    }
-    else
-    {
-        LOG_W("Speaker device not found");
-    }
-
-    rt_pin_write(LED_PIN_G, LED_ON);
-    rt_pin_write(LED_PIN_B, LED_ON);
-
-    buf_size = pdm_calc_buffer_from_seconds(PDM_RECORD_DURATION_SEC);
-    uint32_t loop_count = 0;
-    g_write_buffer_index = 0;
-    g_stop_receive_data = false;
-    g_pdm_error = PDM_ERROR_NONE;
-
-    err = R_PDM_Start(&g_pdm0_ctrl, g_pdm_buffer[0], buf_size.bytes, buf_size.samples / 4);
-    if (err != FSP_SUCCESS)
-    {
-        LOG_E("R_PDM_Start failed: %d", err);
-        goto cleanup;
-    }
-
-    while (1)
-    {
-        while (!g_stop_receive_data)
-        {
-            rt_thread_mdelay(1);
-        }
-
-        err = R_PDM_Stop(&g_pdm0_ctrl);
-        if (err != FSP_SUCCESS)
-        {
-            LOG_E("R_PDM_Stop failed: %d, skip this frame", err);
-            g_stop_receive_data = false;
-            err = R_PDM_Start(&g_pdm0_ctrl, g_pdm_buffer[g_write_buffer_index],
-                              buf_size.bytes, buf_size.samples / 4);
-            if (err != FSP_SUCCESS)
-            {
-                LOG_E("R_PDM_Start failed: %d, abort", err);
-                break;
-            }
-            continue;
-        }
-
-        convert_pdm_to_dac(g_pdm_buffer[g_write_buffer_index], buf_size.samples,
-                           g_dac_buffer[g_write_buffer_index]);
-
-        uint8_t ready_idx = g_write_buffer_index;
-        g_write_buffer_index = (g_write_buffer_index + 1) % NUM_BUFFERS;
-        g_stop_receive_data = false;
-        err = R_PDM_Start(&g_pdm0_ctrl, g_pdm_buffer[g_write_buffer_index],
-                          buf_size.bytes, buf_size.samples / 4);
-        if (err != FSP_SUCCESS)
-        {
-            LOG_E("R_PDM_Start failed: %d, abort", err);
-            break;
-        }
-
-        if (sound_dev != RT_NULL)
-        {
-            rt_size_t total_bytes = buf_size.samples * 2;
-            rt_size_t chunk_size = 512;
-            rt_size_t offset = 0;
-
-            while (offset < total_bytes)
-            {
-                rt_size_t remaining = total_bytes - offset;
-                rt_size_t write_size = (remaining < chunk_size) ? remaining : chunk_size;
-
-                rt_size_t bytes_written = rt_device_write(sound_dev, 0,
-                                                          (uint8_t *)g_dac_buffer[ready_idx] + offset,
-                                                          write_size);
-
-                if (bytes_written > 0)
-                {
-                    offset += bytes_written;
-                }
-                else
-                {
-                    rt_thread_mdelay(1);
-                }
-            }
-        }
-
-        loop_count++;
-        if (loop_count % 50 == 0)
-        {
-            rt_pin_write(LED_PIN_B, !rt_pin_read(LED_PIN_B));
-        }
-    }
-
-cleanup:
-    R_PDM_Close(&g_pdm0_ctrl);
-    if (sound_dev != RT_NULL)
-    {
-        rt_device_close(sound_dev);
-    }
-    LOG_E("Audio loopback thread exited");
-}
+/* P413 = USB_CH_SEL: USB-C mux select on Titan Mini. LOW -> USBFS (Full-Speed) path. */
+#define USB_CH_SEL_PIN   BSP_IO_PORT_04_PIN_13
 
 void hal_entry(void)
 {
     rt_kprintf("\n");
     rt_kprintf("********************************************************************************\n");
-    rt_kprintf("*   PDM Microphone -> Speaker Real-time Loopback (Double Buffer)               *\n");
-    rt_kprintf("********************************************************************************\n");
-    rt_kprintf("Sample Rate: %d Hz, Channels: %d\n", PDM_FS_HZ, PDM_CHANNELS);
-    rt_kprintf("Buffer: %d samples x %d buffers\n", PDM_BUFFER_NUM_SAMPLES, NUM_BUFFERS);
+    rt_kprintf("*   Titan Mini USB Microphone (UAC1 capture: 48 kHz / stereo / 16-bit)          *\n");
+    rt_kprintf("*   PDM mic -> USB isochronous IN -> PC                                          *\n");
+    rt_kprintf("*   Connect the board USB-DEV FS port to the PC.                              *\n");
     rt_kprintf("********************************************************************************\n\n");
 
     rt_pin_mode(LED_PIN_R, PIN_MODE_OUTPUT);
@@ -266,19 +42,52 @@ void hal_entry(void)
     rt_pin_write(LED_PIN_G, LED_OFF);
     rt_pin_write(LED_PIN_B, LED_OFF);
 
-    rt_thread_t audio = rt_thread_create("audio_lb",
-                                         audio_loopback_thread_entry,
-                                         RT_NULL,
-                                         AUDIO_LOOPBACK_THREAD_STACK_SIZE,
-                                         AUDIO_LOOPBACK_THREAD_PRIORITY,
-                                         AUDIO_LOOPBACK_THREAD_TICK);
-    if (audio != RT_NULL)
+    /* route the USB-C connector to the Full-Speed USB port (P413 LOW = USBFS) */
+    rt_pin_mode(USB_CH_SEL_PIN, PIN_MODE_OUTPUT);
+    rt_pin_write(USB_CH_SEL_PIN, PIN_LOW);
+
+    /* start the USB microphone (UAC1 capture) application */
+    usb_paud_app();
+
+    while (1)
     {
-        rt_thread_startup(audio);
-        LOG_I("Audio loopback thread started");
-    }
-    else
-    {
-        LOG_E("Create audio loopback thread failed");
+        rt_pin_write(LED_PIN_G, LED_ON);
+        rt_thread_mdelay(500);
+        rt_pin_write(LED_PIN_G, LED_OFF);
+        rt_thread_mdelay(500);
     }
 }
+
+/* ===================== PDM mic -> speaker loopback (default) ===================== */
+#else
+
+#include "pdm_loopback.h"
+
+void hal_entry(void)
+{
+    rt_kprintf("\n");
+    rt_kprintf("********************************************************************************\n");
+    rt_kprintf("*   PDM Microphone -> Speaker Real-time Loopback (48 kHz / DMA)               *\n");
+    rt_kprintf("********************************************************************************\n");
+    rt_kprintf("Sample Rate: 48000 Hz, 20 ms blocks, low latency\n");
+    rt_kprintf("********************************************************************************\n\n");
+
+    rt_pin_mode(LED_PIN_R, PIN_MODE_OUTPUT);
+    rt_pin_mode(LED_PIN_G, PIN_MODE_OUTPUT);
+    rt_pin_mode(LED_PIN_B, PIN_MODE_OUTPUT);
+    rt_pin_write(LED_PIN_R, LED_OFF);
+    rt_pin_write(LED_PIN_G, LED_OFF);
+    rt_pin_write(LED_PIN_B, LED_OFF);
+
+    pdm_loopback_app();
+
+    while (1)
+    {
+        rt_pin_write(LED_PIN_G, LED_ON);
+        rt_thread_mdelay(500);
+        rt_pin_write(LED_PIN_G, LED_OFF);
+        rt_thread_mdelay(500);
+    }
+}
+
+#endif /* BSP_USING_USB_PAUD */

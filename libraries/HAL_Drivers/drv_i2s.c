@@ -43,23 +43,57 @@ static struct sound_device snd_dev = {0};
 bool music_player_active = false;
 bool music_player_pause = false;
 
-static fsp_err_t sound_configure_audio_clock(void)
+/* ---- sample rate -> MCLK(GPT) + SSI bit clock ----
+ * BCLK = GPTCLK(300 MHz) / gpt_period / ssi_div ; fs = BCLK / 32 (stereo 16-bit).
+ * MCLK = GPTCLK / gpt_period, kept near 128 x fs for the ES8156 PLL.
+ */
+typedef struct
 {
-    fsp_err_t err;
+    uint32_t fs;
+    uint16_t gpt_period;
+    uint16_t gpt_duty;
+    uint32_t ssi_div;               /* SSICR.CKDV = SSI_CLOCK_DIV_x */
+} i2s_rate_t;
 
-    err = R_GPT_Stop(&g_timer2_ctrl);
+static const i2s_rate_t s_i2s_rates[] =
+{
+    { 48000U, 49U, 24U, SSI_CLOCK_DIV_4  },
+    { 44100U, 53U, 26U, SSI_CLOCK_DIV_4  },
+    { 16000U, 49U, 24U, SSI_CLOCK_DIV_12 },
+    { 8000U,  49U, 24U, SSI_CLOCK_DIV_24 },
+};
+
+static fsp_err_t sound_set_sample_rate(uint32_t fs)
+{
+    const i2s_rate_t * rate = NULL;
+
+    for (uint32_t i = 0U; i < (sizeof(s_i2s_rates) / sizeof(s_i2s_rates[0])); i++)
+    {
+        if (s_i2s_rates[i].fs == fs)
+        {
+            rate = &s_i2s_rates[i];
+            break;
+        }
+    }
+
+    if (rate == NULL)
+    {
+        return FSP_ERR_UNSUPPORTED;
+    }
+
+    fsp_err_t err = R_GPT_Stop(&g_timer2_ctrl);
     if (FSP_SUCCESS != err)
     {
         return err;
     }
 
-    err = R_GPT_PeriodSet(&g_timer2_ctrl, GPT_AUDIO_MCLK_PERIOD_COUNTS);
+    err = R_GPT_PeriodSet(&g_timer2_ctrl, rate->gpt_period);
     if (FSP_SUCCESS != err)
     {
         return err;
     }
 
-    err = R_GPT_DutyCycleSet(&g_timer2_ctrl, GPT_AUDIO_MCLK_DUTY_COUNTS, GPT_IO_PIN_GTIOCA);
+    err = R_GPT_DutyCycleSet(&g_timer2_ctrl, rate->gpt_duty, GPT_IO_PIN_GTIOCA);
     if (FSP_SUCCESS != err)
     {
         return err;
@@ -72,7 +106,15 @@ static fsp_err_t sound_configure_audio_clock(void)
     }
 
     err = R_GPT_Start(&g_timer2_ctrl);
-    return err;
+    if (FSP_SUCCESS != err)
+    {
+        return err;
+    }
+
+    /* apply the SSI bit clock divider at runtime (cfg comes from generated hal_data) */
+    g_i2s0_ctrl.p_reg->SSICR_b.CKDV = rate->ssi_div;
+
+    return FSP_SUCCESS;
 }
 
 static rt_size_t sound_expand_mono_to_stereo_16bit(const rt_uint8_t *src, rt_size_t src_size, rt_uint8_t *dst, rt_size_t dst_size)
@@ -231,18 +273,15 @@ static rt_err_t sound_configure(struct rt_audio_device *audio, struct rt_audio_c
             snd_dev->audio_config.channels     = caps->udata.config.channels;
             snd_dev->audio_config.samplebits   = caps->udata.config.samplebits;
             rt_kprintf("AUDIO_DSP_PARAM:set samplerate %d", snd_dev->audio_config.samplerate);
-            if ((snd_dev->audio_config.samplerate != I2S_SUPPORTED_SAMPLE_RATE) ||
+            if ((FSP_SUCCESS != sound_set_sample_rate(snd_dev->audio_config.samplerate)) ||
                 ((snd_dev->audio_config.channels != I2S_SUPPORTED_CHANNELS) &&
                  (snd_dev->audio_config.channels != I2S_SUPPORTED_MONO_CHANNELS)) ||
                 (snd_dev->audio_config.samplebits != I2S_SUPPORTED_SAMPLE_BITS))
             {
-                LOG_W("unsupported wav format: %d Hz, %d ch, %d bit; driver is fixed at %d Hz, %d ch, %d bit",
+                LOG_W("unsupported wav format: %d Hz, %d ch, %d bit (supported rates: 8k/16k/44.1k/48k)",
                       snd_dev->audio_config.samplerate,
                       snd_dev->audio_config.channels,
-                      snd_dev->audio_config.samplebits,
-                      I2S_SUPPORTED_SAMPLE_RATE,
-                      I2S_SUPPORTED_CHANNELS,
-                      I2S_SUPPORTED_SAMPLE_BITS);
+                      snd_dev->audio_config.samplebits);
             }
             break;
         }
@@ -250,6 +289,7 @@ static rt_err_t sound_configure(struct rt_audio_device *audio, struct rt_audio_c
         {
             snd_dev->audio_config.samplerate = caps->udata.config.samplerate;
             rt_kprintf("AUDIO_DSP_SAMPLERATE:set samplerate %d", snd_dev->audio_config.samplerate);
+            sound_set_sample_rate(snd_dev->audio_config.samplerate);
             break;
         }
         case AUDIO_DSP_CHANNELS:
@@ -283,10 +323,10 @@ static rt_err_t sound_init(struct rt_audio_device *audio)
     R_GPT_Open(&g_timer2_ctrl, &g_timer2_cfg);
     R_GPT_Enable(&g_timer2_ctrl);
 
-    fsp_err_t err = sound_configure_audio_clock();
+    fsp_err_t err = sound_set_sample_rate(I2S_SUPPORTED_SAMPLE_RATE);
     if (FSP_SUCCESS != err)
     {
-        LOG_E("GPT audio clock configure failed: %d", err);
+        LOG_E("sound_set_sample_rate failed: %d", err);
         return -RT_ERROR;
     }
 

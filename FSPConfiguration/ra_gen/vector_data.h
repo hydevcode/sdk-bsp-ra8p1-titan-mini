@@ -63,7 +63,6 @@
         void spi_b_tei_isr(void);
         void spi_b_eri_isr(void);
         void pdm_sdet_isr(void);
-        void pdm_dat_isr(void);
         void pdm_err_isr(void);
         void glcdc_line_detect_isr(void);
         void vin_status_isr(void);
@@ -198,10 +197,10 @@
         #define SCI1_ERI_IRQn          ((IRQn_Type) 59) /* SCI1 ERI (Receive error) */
         #define VECTOR_NUMBER_PDM_SDET ((IRQn_Type) 60) /* PDM SDET (Sound detection interrupt) */
         #define PDM_SDET_IRQn          ((IRQn_Type) 60) /* PDM SDET (Sound detection interrupt) */
-        #define VECTOR_NUMBER_PDM_DAT2 ((IRQn_Type) 61) /* PDM DAT2 (Data reception interrupt channel 2) */
-        #define PDM_DAT2_IRQn          ((IRQn_Type) 61) /* PDM DAT2 (Data reception interrupt channel 2) */
-        #define VECTOR_NUMBER_PDM_ERR2 ((IRQn_Type) 62) /* PDM ERR2 (Error detection interrupt channel 2) */
-        #define PDM_ERR2_IRQn          ((IRQn_Type) 62) /* PDM ERR2 (Error detection interrupt channel 2) */
+        #define VECTOR_NUMBER_PDM_ERR2 ((IRQn_Type) 61) /* PDM ERR2 (Error detection interrupt channel 2) */
+        #define PDM_ERR2_IRQn          ((IRQn_Type) 61) /* PDM ERR2 (Error detection interrupt channel 2) */
+        #define VECTOR_NUMBER_DMAC1_INT ((IRQn_Type) 62) /* DMAC1 INT (DMAC1 transfer end) */
+        #define DMAC1_INT_IRQn          ((IRQn_Type) 62) /* DMAC1 INT (DMAC1 transfer end) */
         #define VECTOR_NUMBER_GPT0_COUNTER_OVERFLOW ((IRQn_Type) 63) /* GPT0 COUNTER OVERFLOW (Overflow) */
         #define GPT0_COUNTER_OVERFLOW_IRQn          ((IRQn_Type) 63) /* GPT0 COUNTER OVERFLOW (Overflow) */
         #define VECTOR_NUMBER_GLCDC_LINE_DETECT ((IRQn_Type) 64) /* GLCDC LINE DETECT (Specified line) */

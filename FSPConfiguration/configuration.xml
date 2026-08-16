@@ -566,6 +566,10 @@
       <description>Ethos-U core driver</description>
       <originalPack>Arm.Ethos-U-Core-Driver.25.2.0+renesas.0.fsp.6.4.0.pack</originalPack>
     </component>
+    <component apiversion="" class="HAL Drivers" condition="" group="all" subgroup="r_usb_paud" variant="" vendor="Renesas" version="6.4.0">
+      <description>USB Peripheral Audio Device Class</description>
+      <originalPack>Renesas.RA.6.4.0.pack</originalPack>
+    </component>
   </raComponentSelection>
   <raElcConfiguration/>
   <raIcuConfiguration/>
@@ -2254,8 +2258,8 @@
       <property id="module.driver.pdm.channel" value="2"/>
       <property id="module.driver.pdm.edge" value="module.driver.pdm.egde.pdm_egde_rise"/>
       <property id="module.driver.pdm.clock_div" value="module.driver.pdm.clock_div.pdm_clock_div_2"/>
-      <property id="module.driver.pdm.pcm_width" value="module.driver.pdm.pcm_width_16bits_0_14"/>
-      <property id="module.driver.pdm.pdm_output_sampling_freq" value="16000"/>
+      <property id="module.driver.pdm.pcm_width" value="module.driver.pdm.pcm_width_20bits_0_18"/>
+      <property id="module.driver.pdm.pdm_output_sampling_freq" value="48000"/>
       <property id="module.driver.pdm.moving_average_mode" value="module.driver.pdm.moving_average_mode.order_1"/>
       <property id="module.driver.pdm.lpf_shift" value="module.driver.pdm.lpf_shift.shift_0"/>
       <property id="module.driver.pdm.lpf_coefficient_h0" value="0x0400"/>
@@ -2308,7 +2312,7 @@
       <property id="module.driver.pdm.overvoltage_detection_upper_limit" value="0x7A120"/>
       <property id="module.driver.pdm.callback" value="pdm_callback"/>
       <property id="module.driver.pdm.sdet_ipl" value="board.icu.common.irq.priority12"/>
-      <property id="module.driver.pdm.dat_ipl" value="board.icu.common.irq.priority12"/>
+      <property id="module.driver.pdm.dat_ipl" value="_disabled"/>
       <property id="module.driver.pdm.err_ipl" value="board.icu.common.irq.priority12"/>
     </module>
     <module id="module.driver.timer_on_gpt.1295364440">
@@ -2902,6 +2906,43 @@
     </module>
     <module id="module.google.tflm.core.lib.929530672"/>
     <module id="module.google.tflm.kernel.ethosu.1946303502"/>
+    <module id="module.driver.paud_on_usb.1148903484">
+      <property id="module.driver.paud.name" value="g_paud0"/>
+    </module>
+    <module id="module.driver.basic_on_usb.1512254083">
+      <property id="module.driver.basic.name" value="g_basic1"/>
+      <property id="module.driver.usb_basic.usb_mode" value="module.driver.usb_basic.usb_mode.host"/>
+      <property id="module.driver.usb_basic.usb_speed" value="module.driver.usb_basic.usb_speed.fs"/>
+      <property id="module.driver.usb_basic.usb_modulenumber" value="module.driver.usb_basic.usb_modulenumber.0"/>
+      <property id="module.driver.usb_basic.p_usb_reg" value="g_usb_descriptor"/>
+      <property id="module.driver.usb_basic.complience_cb" value="NULL"/>
+      <property id="module.driver.usb_basic.ipl" value="board.icu.common.irq.priority12"/>
+      <property id="module.driver.usb_basic.ipl_r" value="board.icu.common.irq.priority12"/>
+      <property id="module.driver.usb_basic.ipl_d0" value="board.icu.common.irq.priority12"/>
+      <property id="module.driver.usb_basic.ipl_d1" value="board.icu.common.irq.priority12"/>
+      <property id="module.driver.usb_basic.hsipl" value="board.icu.common.irq.priority12"/>
+      <property id="module.driver.usb_basic.hsipl_d0" value="board.icu.common.irq.priority12"/>
+      <property id="module.driver.usb_basic.hsipl_d1" value="board.icu.common.irq.priority12"/>
+      <property id="module.driver.usb_basic.rtos_callback" value="NULL"/>
+      <property id="module.driver.usb_basic.other_context" value="NULL"/>
+    </module>
+    <module id="module.driver.transfer_on_dmac.1992657883">
+      <property id="module.driver.transfer.name" value="g_transfer5"/>
+      <property id="module.driver.transfer.channel" value="1"/>
+      <property id="module.driver.transfer.mode" value="module.driver.transfer.mode.mode_normal"/>
+      <property id="module.driver.transfer.size" value="module.driver.transfer.size.size_2_byte"/>
+      <property id="module.driver.transfer.dest_addr_mode" value="module.driver.transfer.dest_addr_mode.addr_mode_fixed"/>
+      <property id="module.driver.transfer.src_addr_mode" value="module.driver.transfer.src_addr_mode.addr_mode_fixed"/>
+      <property id="module.driver.transfer.repeat_area" value="module.driver.transfer.repeat_area.repeat_area_source"/>
+      <property id="module.driver.transfer.length" value="1"/>
+      <property id="module.driver.transfer.num_blocks" value="0"/>
+      <property id="module.driver.transfer.activation_event" value="enum.elc_none.none"/>
+      <property id="module.driver.transfer.p_callback" value="NULL"/>
+      <property id="module.driver.transfer.ipl" value="board.icu.common.irq.priority5"/>
+      <property id="module.driver.transfer.interrupt" value="module.driver.transfer.interrupt.interrupt_end"/>
+      <property id="module.driver.transfer.offset" value="1"/>
+      <property id="module.driver.transfer.src.buffer" value="1"/>
+    </module>
     <context id="_hal.0">
       <stack module="module.driver.ioport_on_ioport.0"/>
       <stack module="module.driver.ether_on_rmac.1536667874">
@@ -2947,7 +2988,9 @@
         <stack module="module.driver.transfer_on_dtc.2139581273" requires="module.driver.spi_on_spi_b.requires.transfer_rx"/>
       </stack>
       <stack module="module.driver.uart_on_sci_b_uart.1684480661"/>
-      <stack module="module.driver.pdm_on_pdm.218671598"/>
+      <stack module="module.driver.pdm_on_pdm.218671598">
+        <stack module="module.driver.transfer_on_dmac.1992657883" requires="module.driver.pdm_on_pdm.requires.transfer_rx"/>
+      </stack>
       <stack module="module.driver.timer_on_gpt.1912013917"/>
       <stack module="module.driver.timer_on_gpt.1295364440"/>
       <stack module="module.driver.timer_on_gpt.1678953170"/>
@@ -2965,6 +3008,9 @@
             <stack module="module.arm.ethosu.core.driver.167370182" requires="module.middleware.rm_ethosu.requires.driver"/>
           </stack>
         </stack>
+      </stack>
+      <stack module="module.driver.paud_on_usb.1148903484">
+        <stack module="module.driver.basic_on_usb.1512254083" requires="module.driver.basic_on_usb.requires.basic"/>
       </stack>
     </context>
     <config id="config.driver.ospi_b">
@@ -3068,6 +3114,7 @@
       <property id="config.driver.ioport.checking" value="config.driver.ioport.checking.system"/>
       <property id="config.driver.ioport.ccd_support_enable" value="config.driver.ioport.ccd_support_enable.disabled"/>
     </config>
+    <config id="config.driver.usb_paud_class"/>
     <config id="config.driver.icu">
       <property id="config.driver.icu.param_checking_enable" value="config.driver.icu.param_checking_enable.bsp"/>
     </config>
@@ -3101,7 +3148,7 @@
     </config>
     <config id="config.driver.pdm">
       <property id="config.driver.pdm.param_checking_enable" value="config.driver.pdm.param_checking_enable.bsp"/>
-      <property id="config.driver.pdm.dmac_enable" value="config.driver.pdm.dmac_enable.disabled"/>
+      <property id="config.driver.pdm.dmac_enable" value="config.driver.pdm.dmac_enable.enabled"/>
     </config>
   </raModuleConfiguration>
   <raPinConfiguration>
