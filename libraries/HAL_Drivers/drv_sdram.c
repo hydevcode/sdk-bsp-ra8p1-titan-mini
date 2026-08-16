@@ -221,16 +221,28 @@ void drv_sdram_init(void)
 #ifdef BSP_USING_SDRAM
 #ifdef RT_USING_MEMHEAP_AS_HEAP
     struct rt_memheap system_heap;
+    extern uint8_t __ddsc_SDRAM_END[];
 #endif
 
 static int SDRAM_Init(void)
 {
     drv_sdram_init();
 
-    LOG_D("sdram init success, mapped at 0x%X, size is %d bytes, data width is %d", 0x68000000, BSP_USING_SDRAM_SIZE - 0xC00000, 32);
+    LOG_D("sdram init success, mapped at 0x%X, size is %d bytes, data width is %d", 0x68000000, BSP_USING_SDRAM_SIZE, 16);
 #ifdef RT_USING_MEMHEAP_AS_HEAP
     /* If RT_USING_MEMHEAP_AS_HEAP is enabled, SDRAM is initialized to the heap */
-   rt_memheap_init(&system_heap, "sdram", (void *)0x68000000, BSP_USING_SDRAM_SIZE);
+    uintptr_t heap_start = ((uintptr_t)__ddsc_SDRAM_END + 31U) & ~(uintptr_t)31U;
+    uintptr_t heap_end = 0x68000000U + BSP_USING_SDRAM_SIZE;
+
+    if ((heap_start + 0x10000U) < heap_end)
+    {
+        rt_memheap_init(&system_heap, "sdram", (void *)heap_start, heap_end - heap_start);
+        LOG_D("sdram heap mapped at 0x%X, size is %d bytes", heap_start, heap_end - heap_start);
+    }
+    else
+    {
+        LOG_W("sdram heap skipped, no safe free range after 0x%X", heap_start);
+    }
 #endif
     return RT_EOK;
 }

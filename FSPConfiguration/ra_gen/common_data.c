@@ -195,7 +195,7 @@ uint8_t vin_image_buffer_3[VIN_BYTES_PER_FRAME] BSP_ALIGN_VARIABLE(128) BSP_PLAC
             .p_mipi_csi_instance      = &g_cam_mipi_csi,
 
             .input_ctrl.cfg_bits.color_space_convert_bypass      = 0,
-            .input_ctrl.cfg_bits.interlace_mode                  = VIN_INTERLACE_MODE_ODD_EVEN_FIELD_CAPTURE,
+            .input_ctrl.cfg_bits.interlace_mode                  = VIN_INTERLACE_MODE_ODD_FIELD_CAPTURE,
             .input_ctrl.cfg_bits.big_endian                      = 0,
             .input_ctrl.cfg_bits.dithering_mode                  = VIN_DITHERING_MODE_WITH_ADDITION,
             .input_ctrl.cfg_bits.input_mode                      = VIN_INPUT_FORMAT_YCBCR422_8_BIT,
@@ -214,7 +214,7 @@ uint8_t vin_image_buffer_3[VIN_BYTES_PER_FRAME] BSP_ALIGN_VARIABLE(128) BSP_PLAC
             .input_ctrl.csi_mode_bits.data_type                  = VIN_DATA_TYPE_YUV422_8_BIT,
             .input_ctrl.csi_mode_bits.sign_extend_disable        = 1,
 
-            .input_ctrl.csi_detect_bits.field_detect_enable      = 1,
+            .input_ctrl.csi_detect_bits.field_detect_enable      = 0,
             .input_ctrl.csi_detect_bits.even_field_detect_enable = 1,
             .input_ctrl.csi_detect_bits.even_field_number        = 0,
 

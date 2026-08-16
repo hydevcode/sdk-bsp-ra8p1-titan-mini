@@ -13,10 +13,6 @@
 #include <rtdevice.h>
 #include <rtthread.h>
 
-//#define DRV_DEBUG
-#define LOG_TAG             "camera.i2c"
-#include <drv_log.h>
-
 #define BSP_I2C_SLAVE_ADDR_CAMERA   (0x3C) /* Slave address for OV Camera Module */
 
 /* define your i2c bus name HERE */
@@ -37,10 +33,8 @@ int camera_i2c_init(void)
         i2c_bus = (struct rt_i2c_bus_device *)rt_device_find(I2C_BUS_NAME);
         if (i2c_bus == RT_NULL)
         {
-            LOG_E("Failed to find I2C bus: %s", I2C_BUS_NAME);
             return -RT_ERROR;
         }
-        LOG_I("I2C bus initialized: %s", I2C_BUS_NAME);
     }
     return RT_EOK;
 }
@@ -57,7 +51,6 @@ static bool camera_i2c_transfer(struct rt_i2c_msg *msgs, rt_uint32_t num)
 
     if (rt_i2c_transfer(i2c_bus, msgs, num) != num)
     {
-        LOG_D("I2C transfer failed");
         return false;
     }
     return true;
@@ -101,7 +94,7 @@ bool rdSensorReg16_8(uint16_t regID, uint8_t *regDat)
     {
         {
             .addr  = CAMERA_I2C_ADDR,
-            .flags = RT_I2C_WR | RT_I2C_NO_START,
+            .flags = RT_I2C_WR,
             .buf   = reg_addr,
             .len   = sizeof(reg_addr)
         },
@@ -123,7 +116,7 @@ bool rdSensorReg16_Multi(uint16_t regID, uint8_t *regDat, uint32_t len)
     {
         {
             .addr  = CAMERA_I2C_ADDR,
-            .flags = RT_I2C_WR | RT_I2C_NO_START,
+            .flags = RT_I2C_WR,
             .buf   = reg_addr,
             .len   = sizeof(reg_addr)
         },
@@ -147,7 +140,6 @@ bool wrSensorReg16_Multi(uint16_t regID, uint8_t *regDat, uint32_t len)
 
     if (len > 256)
     {
-        LOG_E("Multi-write length %d exceeds maximum 256", len);
         return false;
     }
 

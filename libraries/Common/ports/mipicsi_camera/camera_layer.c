@@ -12,6 +12,7 @@
 #include "common_data.h"
 
 #include "camera_layer.h"
+#include "../../../../src/ov5640_tuning.h"
 
 #define REG_PRODUCT_ID_H            (0x300a)
 #define REG_PRODUCT_ID_L            (0x300b)
@@ -125,10 +126,25 @@
 #endif
 #define X_ADDR_START ((X_OV5640_PHYSICAL_PIXEL_SIZE - X_ISP_INPUT_SIZE) / 2)
 #define Y_ADDR_START ((Y_OV5640_PHYSICAL_PIXEL_SIZE - Y_ISP_INPUT_SIZE) / 2)
-#define X_ADDR_END   (X_ADDR_START + X_ISP_INPUT_SIZE)
-#define Y_ADDR_END   (Y_ADDR_START + Y_ISP_INPUT_SIZE)
+#define X_ADDR_END   (X_ADDR_START + X_ISP_INPUT_SIZE - 1)
+#define Y_ADDR_END   (Y_ADDR_START + Y_ISP_INPUT_SIZE - 1)
 #define X_OFFSET     0x0010
 #define Y_OFFSET     0x0010
+
+#if (CAMERA_OV5640_TARGET_FPS == 60)
+#define OV5640_VGA_HTS         (0x0850U)
+#define OV5640_VGA_VTS         (0x0258U)
+#define OV5640_VGA_AEC_MAX     (0x0258U)
+#elif (CAMERA_OV5640_TARGET_FPS == 30)
+#define OV5640_VGA_HTS         (0x0850U)
+#define OV5640_VGA_VTS         (0x04B0U)
+#define OV5640_VGA_AEC_MAX     (0x0544U)
+#else
+#error "CAMERA_OV5640_TARGET_FPS must be 30 or 60"
+#endif
+
+#define OV5640_U16_H(_value)   ((uint8_t)(((_value) >> 8) & 0xFFU))
+#define OV5640_U16_L(_value)   ((uint8_t)((_value) & 0xFFU))
 
 
 
@@ -423,6 +439,7 @@ static const st_ov_reg_t cam_config_table_normal_mode[] =
 
  { 0x3017, 0x00 }, // set Frex, Vsync, Href, PCLK, D[9:6] input
  { 0x3018, 0x00 }, // set d[5:0], GPIO[1:0] input
+ { 0x3019, 0x70 }, // Put MIPI data lanes and clock lane in LP11 while sleeping
  { 0x3034, 0x10 | 8 }, // MIPI 8-bit mode
 
  { 0x3037, 0x13 }, // PLL
@@ -467,7 +484,7 @@ static const st_ov_reg_t cam_config_table_normal_mode[] =
  { 0x3810, ((X_OFFSET >> 8) & 0xFF) }, // ISP X offset H
  { 0x3811, (X_OFFSET & 0xFF) },        // ISP X offset L
  { 0x3812, ((Y_OFFSET >> 8) & 0xFF) }, // ISP Y offset H
- { 0x3813, (Y_OFFSET & 0xFF) },        // ISP Y offset L
+ { 0x3813, (Y_OFFSET & 0xFF) },   
  // Data output size (after scaling)
  { 0x3808, ((CAMERA_ACTIVE_IMAGE_WIDTH >> 8) & 0xFF) },  // Xout size_high- 0x0280(640)
  { 0x3809, (CAMERA_ACTIVE_IMAGE_WIDTH & 0xFF) },         // Xout size_low
@@ -487,17 +504,17 @@ static const st_ov_reg_t cam_config_table_normal_mode[] =
  { 0x3004, 0xff }, // clock enable 00
  { 0x3006, 0xc3 }, // clock enable 2
 
- { 0x300e, 0x44 }, // MIPI control, 2 lane, MIPI enable
+ { 0x300e, 0x44 }, // MIPI control, 2 lanes, MIPI enable
 
  { 0x302e, 0x08 }, // Unknown
 
  { 0x4300, 0x32 }, // YUV 422 (8bit), YUYV
 
  { 0x501f, 0x00 }, // ISP format: ISP YUV 422
- { 0x4407, 0x04 }, // JPEG QS
+ { 0x4407, 0x04 },
  { 0x5000, 0xa7 }, // ISP control, Lenc on, gamma on, BPC on, WPC on, CIP on
 
- { 0x3406, 0x01 }, // Bit0: AWB gain manual enable
+ { 0x3406, 0x00 }, // Use auto AWB gain instead of fixed manual gains
  { 0x3400, 0x06 },
  { 0x3401, 0x80 },
  { 0x3402, 0x04 },
@@ -507,18 +524,18 @@ static const st_ov_reg_t cam_config_table_normal_mode[] =
 
  // AWB
  { 0x5180, 0xff }, { 0x5181, 0xf2 }, { 0x5182, 0x00 }, { 0x5183, 0x14 },
- { 0x5184, 0x25 }, { 0x5185, 0x24 }, { 0x5186, 0x16 }, { 0x5187, 0x16 },
- { 0x5188, 0x16 }, { 0x5189, 0x62 }, { 0x518a, 0x62 }, { 0x518b, 0xf0 },
- { 0x518c, 0xb2 }, { 0x518d, 0x50 }, { 0x518e, 0x30 }, { 0x518f, 0x30 },
- { 0x5190, 0x50 }, { 0x5191, 0xf8 }, { 0x5192, 0x04 }, { 0x5193, 0x70 },
+ { 0x5184, 0x25 }, { 0x5185, 0x24 }, { 0x5186, 0x09 }, { 0x5187, 0x09 },
+ { 0x5188, 0x09 }, { 0x5189, 0x88 }, { 0x518a, 0x54 }, { 0x518b, 0xee },
+ { 0x518c, 0xb2 }, { 0x518d, 0x50 }, { 0x518e, 0x34 }, { 0x518f, 0x6b },
+ { 0x5190, 0x46 }, { 0x5191, 0xf8 }, { 0x5192, 0x04 }, { 0x5193, 0x70 },
  { 0x5194, 0xf0 }, { 0x5195, 0xf0 }, { 0x5196, 0x03 }, { 0x5197, 0x01 },
- { 0x5198, 0x04 }, { 0x5199, 0x12 }, { 0x519a, 0x04 }, { 0x519b, 0x00 },
- { 0x519c, 0x06 }, { 0x519d, 0x82 }, { 0x519e, 0x38 },
+ { 0x5198, 0x04 }, { 0x5199, 0x6c }, { 0x519a, 0x04 }, { 0x519b, 0x00 },
+ { 0x519c, 0x09 }, { 0x519d, 0x2b }, { 0x519e, 0x38 },
 
  // Color matrix
- { 0x5381, 0x1e }, { 0x5382, 0x5b }, { 0x5383, 0x14 }, { 0x5384, 0x06 },
- { 0x5385, 0x82 }, { 0x5386, 0x88 }, { 0x5387, 0x7c }, { 0x5388, 0x60 },
- { 0x5389, 0x1c }, { 0x538a, 0x01 }, { 0x538b, 0x98 },
+ { 0x5381, 0x1e }, { 0x5382, 0x5b }, { 0x5383, 0x08 }, { 0x5384, 0x0a },
+ { 0x5385, 0x7e }, { 0x5386, 0x88 }, { 0x5387, 0x7c }, { 0x5388, 0x6c },
+ { 0x5389, 0x10 }, { 0x538a, 0x01 }, { 0x538b, 0x98 },
 
  //Sharp&Noise
  { 0x5300, 0x08 }, { 0x5301, 0x30 }, { 0x5302, 0x5f }, { 0x5303, 0x10 },  // 0x5302: 0x3f->0x5f 增强降噪强度
@@ -526,16 +543,16 @@ static const st_ov_reg_t cam_config_table_normal_mode[] =
  { 0x5309, 0x08 }, { 0x530a, 0x30 }, { 0x530b, 0x04 }, { 0x530c, 0x06 },
 
  // Gamma
- { 0x5480, 0x01 }, { 0x5481, 0x06 }, { 0x5482, 0x12 }, { 0x5483, 0x24 },
- { 0x5484, 0x4a }, { 0x5485, 0x58 }, { 0x5486, 0x65 }, { 0x5487, 0x72 },
- { 0x5488, 0x7d }, { 0x5489, 0x88 }, { 0x548a, 0x92 }, { 0x548b, 0xa3 },
- { 0x548c, 0xb2 }, { 0x548d, 0xc8 }, { 0x548e, 0xdd }, { 0x548f, 0xf0 },
- { 0x5490, 0x15 },
+ { 0x5480, 0x01 }, { 0x5481, 0x08 }, { 0x5482, 0x14 }, { 0x5483, 0x28 },
+ { 0x5484, 0x51 }, { 0x5485, 0x65 }, { 0x5486, 0x71 }, { 0x5487, 0x7d },
+ { 0x5488, 0x87 }, { 0x5489, 0x91 }, { 0x548a, 0x9a }, { 0x548b, 0xaa },
+ { 0x548c, 0xb8 }, { 0x548d, 0xcd }, { 0x548e, 0xdd }, { 0x548f, 0xea },
+ { 0x5490, 0x1d },
 
  // UV adjust, brightness, contrast
- { 0x5580, 0x06 | REG_VALUE_5580 },
+ { 0x5580, 0x02 | REG_VALUE_5580 },
  { 0x5583, 0x40 },
- { 0x5584, 0x20 },
+ { 0x5584, 0x10 },
  { 0x5589, 0x10 },
  { 0x558a, 0x00 },
  { 0x558b, 0xf8 },
@@ -580,15 +597,19 @@ static const st_ov_reg_t cam_config_table_normal_mode[] =
  { 0x3007, 0XFB }, // Disable DVP PCLK and enable others
 
  // Timing control
- { 0x380c, 0x08 }, { 0x380d, 0x50 }, { 0x380e, 0x04 }, { 0x380f, 0xb0 },
+ { 0x380c, OV5640_U16_H(OV5640_VGA_HTS) }, { 0x380d, OV5640_U16_L(OV5640_VGA_HTS) },
+ { 0x380e, OV5640_U16_H(OV5640_VGA_VTS) }, { 0x380f, OV5640_U16_L(OV5640_VGA_VTS) },
 
  // 5060Hz detector
  { 0x3c01, 0xb4 }, { 0x3c00, 0x04 }, { 0x3a08, 0x00 }, { 0x3a09, 0x93 },
  { 0x3a0e, 0x06 }, { 0x3a0a, 0x00 }, { 0x3a0b, 0x7b }, { 0x3a0d, 0x08 },
 
  // AEC/AGC power down domain control
- { 0x3a00, 0x3c }, { 0x3a02, 0x05 }, { 0x3a03, 0x44 }, { 0x3a14, 0x05 },
- { 0x3a15, 0x44 },
+ { 0x3a00, 0x3c },
+ { 0x3a02, OV5640_U16_H(OV5640_VGA_AEC_MAX) },
+ { 0x3a03, OV5640_U16_L(OV5640_VGA_AEC_MAX) },
+ { 0x3a14, OV5640_U16_H(OV5640_VGA_AEC_MAX) },
+ { 0x3a15, OV5640_U16_L(OV5640_VGA_AEC_MAX) },
 
  { 0x3618, 0x00 }, { 0x3612, 0x29 }, { 0x3708, 0x64 }, { 0x3709, 0x52 }, // Unknown
  { 0x370c, 0x03 }, // Unknown
@@ -596,12 +617,16 @@ static const st_ov_reg_t cam_config_table_normal_mode[] =
  { 0x4001, 0x02 }, // BLC start line
  { 0x4004, 0x02 }, // BLC line number
  { 0x4005, 0x1a }, // BLC always update
- { 0x4713, 0x03 }, // JPEG mode 3
- { 0x460b, 0x35 }, // debug
- { 0x460c, 0x22 }, // VFIFO, PCLK manual
+ { 0x4713, 0x03 },
+ { 0x4602, ((CAMERA_ACTIVE_IMAGE_WIDTH >> 8) & 0xFF) },  // VFIFO H size H
+ { 0x4603, (CAMERA_ACTIVE_IMAGE_WIDTH & 0xFF) },         // VFIFO H size L
+ { 0x4604, ((CAMERA_ACTIVE_IMAGE_HEIGHT >> 8) & 0xFF) }, // VFIFO V size H
+ { 0x4605, (CAMERA_ACTIVE_IMAGE_HEIGHT & 0xFF) },        // VFIFO V size L
+ { 0x460b, 0x37 }, // VFIFO debug mode
+ { 0x460c, 0x20 }, // VFIFO, PCLK manual
  { 0x4837, 0x0a }, // MIPI global timing
- { 0x3824, 0x01 }, // add by bright
- { 0x5001, 0xA3 }, // Bit0: AWB enable, Bit1: Color matrix enable, Bit2: UV average enable
+ { 0x3824, 0x04 }, // PCLK manual divider
+ { 0x5001, 0xA3 }, // Bit0: AWB enable, Bit1: Color matrix enable, Bit5: Scaling enable, Bit7: SDE enable
                    // Bit5: Scaling enable, Bit7: SDE enable
 
 
@@ -617,6 +642,46 @@ static const st_ov_reg_t cam_config_table_normal_mode[] =
  /* End of file marker (0xFFFF) */
  {CONFIG_TABLE_END_DETECT, 0x00ff}
 };
+
+#if (CAMERA_OV5640_OUTPUT_MODE == CAMERA_OV5640_OUTPUT_MODE_1080P)
+static const st_ov_reg_t cam_config_table_1080p_mode[] =
+{
+ { 0x3008, 0x42 },
+ { 0x3035, 0x21 }, { 0x3036, 0x54 }, { 0x3c07, 0x08 },
+ { 0x3c09, 0x1c }, { 0x3c0a, 0x9c }, { 0x3c0b, 0x40 },
+ { 0x3820, 0x40 }, { 0x3821, 0x06 }, { 0x3814, 0x11 },
+ { 0x3815, 0x11 }, { 0x3800, 0x00 }, { 0x3801, 0x00 },
+ { 0x3802, 0x00 }, { 0x3803, 0x00 }, { 0x3804, 0x0a },
+ { 0x3805, 0x3f }, { 0x3806, 0x07 }, { 0x3807, 0x9f },
+ { 0x3808, 0x0a }, { 0x3809, 0x20 }, { 0x380a, 0x07 },
+ { 0x380b, 0x98 }, { 0x380c, 0x0b }, { 0x380d, 0x1c },
+ { 0x380e, 0x07 }, { 0x380f, 0xb0 }, { 0x3810, 0x00 },
+ { 0x3811, 0x10 }, { 0x3812, 0x00 }, { 0x3813, 0x04 },
+ { 0x3618, 0x04 }, { 0x3612, 0x29 }, { 0x3708, 0x21 },
+ { 0x3709, 0x12 }, { 0x370c, 0x00 }, { 0x3a02, 0x03 },
+ { 0x3a03, 0xd8 }, { 0x3a08, 0x01 }, { 0x3a09, 0x27 },
+ { 0x3a0a, 0x00 }, { 0x3a0b, 0xf6 }, { 0x3a0e, 0x03 },
+ { 0x3a0d, 0x04 }, { 0x3a14, 0x03 }, { 0x3a15, 0xd8 },
+ { 0x4001, 0x02 }, { 0x4004, 0x06 }, { 0x4713, 0x03 },
+ { 0x4407, 0x04 }, { 0x460b, 0x35 }, { 0x460c, 0x22 },
+ { 0x3824, 0x02 }, { 0x5001, 0x83 }, { 0x3035, 0x11 },
+ { 0x3036, 0x54 }, { 0x3c07, 0x07 }, { 0x3c08, 0x00 },
+ { 0x3c09, 0x1c }, { 0x3c0a, 0x9c }, { 0x3c0b, 0x40 },
+ { 0x3800, 0x01 }, { 0x3801, 0x50 }, { 0x3802, 0x01 },
+ { 0x3803, 0xb2 }, { 0x3804, 0x08 }, { 0x3805, 0xef },
+ { 0x3806, 0x05 }, { 0x3807, 0xf1 }, { 0x3808, 0x07 },
+ { 0x3809, 0x80 }, { 0x380a, 0x04 }, { 0x380b, 0x38 },
+ { 0x380c, 0x09 }, { 0x380d, 0xc4 }, { 0x380e, 0x04 },
+ { 0x380f, 0x60 }, { 0x3612, 0x2b }, { 0x3708, 0x64 },
+ { 0x3a02, 0x04 }, { 0x3a03, 0x60 }, { 0x3a08, 0x01 },
+ { 0x3a09, 0x50 }, { 0x3a0a, 0x01 }, { 0x3a0b, 0x18 },
+ { 0x3a0e, 0x03 }, { 0x3a0d, 0x04 }, { 0x3a14, 0x04 },
+ { 0x3a15, 0x60 }, { 0x4713, 0x02 }, { 0x4407, 0x04 },
+ { 0x460b, 0x37 }, { 0x460c, 0x20 }, { 0x3824, 0x04 },
+ { 0x4005, 0x1a }, { 0x3008, 0x02 }, { 0x3503, 0x00 },
+ { CONFIG_TABLE_END_DETECT, 0x00ff }
+};
+#endif
 
 static const st_ov_reg_t cam_config_table_test_mode[] =
 {
@@ -636,14 +701,63 @@ static const st_ov_reg_t cam_config_table_test_mode[] =
  *  - camera_capture_image_rgb565         : Contains the copied capture data. This data/buffer can be used for subsequent process.
  */
 
-uint8_t  camera_capture_image_rgb565[CAMERA_CAPTURE_IMAGE_WIDTH  * CAMERA_CAPTURE_IMAGE_HEIGHT * CAMERA_IMAGE_BYTE_PER_PIXEL] BSP_PLACE_IN_SECTION(".sdram_noinit_nocache") BSP_ALIGN_VARIABLE(8);
+uint8_t  camera_capture_image_rgb565[CAMERA_OV5640_RUNTIME_MAX_WIDTH * CAMERA_OV5640_RUNTIME_MAX_HEIGHT * CAMERA_IMAGE_BYTE_PER_PIXEL] BSP_ALIGN_VARIABLE(32) BSP_PLACE_IN_SECTION(".sdram_noinit");
 uint32_t camera_capture_image_rgb565_size = sizeof(camera_capture_image_rgb565);
 
 // #ifndef VIN_CFG_USE_RUNTIME_BUFFER
-static volatile uint8_t * p_camera_capture_buffer_stored BSP_ALIGN_VARIABLE(8) BSP_PLACE_IN_SECTION(BSP_UNINIT_SECTION_PREFIX ".sdram_noinit_nocache");
+static volatile uint8_t * p_camera_capture_buffer_stored;
 static volatile uint32_t g_camera_frame_sequence;
 static volatile uint32_t g_camera_frame_sequence_processed;
-static volatile uint32_t g_camera_invalid_buffer_count;
+static volatile uint16_t g_camera_capture_output_width = CAMERA_CAPTURE_IMAGE_WIDTH;
+static volatile uint16_t g_camera_capture_output_height = CAMERA_CAPTURE_IMAGE_HEIGHT;
+static volatile uint16_t g_camera_sensor_source_width = CAMERA_ACTIVE_IMAGE_WIDTH;
+static volatile uint16_t g_camera_sensor_source_height = CAMERA_ACTIVE_IMAGE_HEIGHT;
+static volatile uint16_t g_camera_vin_window_width = CAMERA_ACTIVE_IMAGE_WIDTH;
+static volatile uint16_t g_camera_vin_window_height = CAMERA_ACTIVE_IMAGE_HEIGHT;
+
+typedef enum camera_sensor_source_mode
+{
+    CAMERA_SENSOR_SOURCE_1080P = 0,
+    CAMERA_SENSOR_SOURCE_720P,
+    CAMERA_SENSOR_SOURCE_VGA,
+    CAMERA_SENSOR_SOURCE_QVGA,
+    CAMERA_SENSOR_SOURCE_QCIF,
+} camera_sensor_source_mode_t;
+
+#if (CAMERA_OV5640_OUTPUT_MODE == CAMERA_OV5640_OUTPUT_MODE_1080P)
+#define CAMERA_OV5640_DEFAULT_SENSOR_SOURCE  CAMERA_SENSOR_SOURCE_1080P
+#else
+#define CAMERA_OV5640_DEFAULT_SENSOR_SOURCE  CAMERA_SENSOR_SOURCE_VGA
+#endif
+
+static camera_sensor_source_mode_t g_camera_sensor_source_mode = CAMERA_OV5640_DEFAULT_SENSOR_SOURCE;
+
+#define CAMERA_VIN_UDS_SCALE_ONE (4096U)
+#define CAMERA_VIN_SCALE_WIDTH_ALIGN (16U)
+#define CAMERA_VIN_WAIT_TIMEOUT_MS (100U)
+
+void camera_frame_cache_discard(uint8_t const * p_buffer, uint32_t length)
+{
+#if CAMERA_VIN_BUFFER_CACHEABLE
+    uintptr_t start;
+    uintptr_t end;
+
+    if ((NULL == p_buffer) || (0U == length))
+    {
+        return;
+    }
+
+    start = ((uintptr_t) p_buffer) & ~(uintptr_t) 31U;
+    end   = (((uintptr_t) p_buffer) + length + 31U) & ~(uintptr_t) 31U;
+
+    SCB_InvalidateDCache_by_Addr((uint32_t *) start, (int32_t) (end - start));
+    __DSB();
+    __ISB();
+#else
+    FSP_PARAMETER_NOT_USED(p_buffer);
+    FSP_PARAMETER_NOT_USED(length);
+#endif
+}
 // #endif
 
 #if (ENABLE_CAMERA_CAPTURE_RUNNING_LED == 1)
@@ -652,12 +766,32 @@ static volatile bool cam_capture_end_led_status = false;
 
 FSP_CPP_HEADER
 static fsp_err_t bsp_camera_write_array (st_ov_reg_t * array);
+static bool      ov5640_register_is_critical(uint16_t reg);
 
 static void      ov5640_mipi_virtual_channel_set(uint32_t vchannel);
 static fsp_err_t ov5640_configure_clocks(void);
 static void      ov5640_stream_on(void);
 static void      ov5640_stream_off(void);
+static void      camera_vin_configure_progressive_csi(void);
+static void      camera_vin_apply_runtime_geometry(void);
+static void      camera_vin_configure_source_window(uint16_t output_width, uint16_t output_height);
+static void      camera_vin_apply_scale(uint16_t width, uint16_t height);
+static void      camera_vin_reset_internal_state(void);
+static void      camera_vin_restore_state(bool enable_module, bool continuous_capture);
+static fsp_err_t camera_vin_wait_capture_idle(void);
+static fsp_err_t camera_vin_wait_axi_idle(void);
+static void      camera_mipi_csi_stop_rx(void);
+static void      camera_mipi_csi_start_rx(void);
+static void      camera_sensor_source_select(uint16_t width, uint16_t height, camera_sensor_source_mode_t * mode);
+static void      camera_sensor_source_size(camera_sensor_source_mode_t mode, uint16_t * width, uint16_t * height);
+static fsp_err_t camera_sensor_source_apply_stopped(camera_sensor_source_mode_t mode,
+                                                    rt_uint16_t * width,
+                                                    rt_uint16_t * height);
+static const char * camera_sensor_source_name(camera_sensor_source_mode_t mode);
+static uint16_t  camera_vin_scale_factor(uint16_t source, uint16_t destination);
 static bool      camera_capture_buffer_is_valid(uint8_t const * p_buffer);
+static uint8_t * camera_vin_buffer_by_index(uint32_t index);
+static uint8_t * camera_vin_completed_buffer_get(void);
 FSP_CPP_FOOTER
 
 struct rt_completion ceu_completion;
@@ -700,15 +834,20 @@ fsp_err_t camera_init (bool use_test_mode)
     // Hardware connection check with product ID check
      rdSensorReg16_8(REG_PRODUCT_ID_H, &reg_val1); // PIDH  PID MSB
      rdSensorReg16_8(REG_PRODUCT_ID_L, &reg_val2); // PIDH  PID LSB REV2c - 0x4C, REV2a = 0x41, REV1a=0x40 otherwise error
-     rt_kprintf("Camera Product ID: 0x%02x 0x%02x\r\n", reg_val1, reg_val2);
      if (!((reg_val2 == CORRECT_PRODUCT_ID_L_REV1A) || (reg_val2 == CORRECT_PRODUCT_ID_L_REV2A) || (reg_val2 == CORRECT_PRODUCT_ID_L_REV2C)))
      {
          return FSP_ERR_HW_LOCKED;
      }
 
-    OV5640_af_init();
     // Setup the Camera
     fsp_status = bsp_camera_write_array((st_ov_reg_t *) &cam_config_table_normal_mode);
+
+#if (CAMERA_OV5640_OUTPUT_MODE == CAMERA_OV5640_OUTPUT_MODE_1080P)
+    if(FSP_SUCCESS == fsp_status)
+    {
+        fsp_status = bsp_camera_write_array((st_ov_reg_t *) &cam_config_table_1080p_mode);
+    }
+#endif
 
     // JDG - Clock related settings
     if(FSP_SUCCESS == fsp_status)
@@ -739,13 +878,16 @@ fsp_err_t camera_init (bool use_test_mode)
         rt_thread_mdelay(5);
 
         fsp_status = R_VIN_Open(&g_cam_vin_ctrl, &g_cam_vin_cfg);
-    }
-
-    if(FSP_SUCCESS == fsp_status)
-    {
-        rt_thread_mdelay(5);
-
-        ov5640_stream_on();
+        if (FSP_SUCCESS == fsp_status)
+        {
+            R_MIPI_CSI->RXIE  = 0;
+            R_MIPI_CSI->DLIE0 = 0;
+            R_MIPI_CSI->DLIE1 = 0;
+            R_MIPI_CSI->VCIE0 = 0;
+            R_MIPI_CSI->PMIE  = 0;
+            R_MIPI_CSI->GSIE  = 0;
+            camera_vin_configure_progressive_csi();
+        }
     }
 
     return fsp_status;
@@ -762,7 +904,27 @@ static fsp_err_t bsp_camera_write_array (st_ov_reg_t * array)
     {
         if(array->reg_num != REQUEST_SOFTWARE_WAIT)
         {
-            wrSensorReg16_8(array->reg_num, array->value);
+            bool write_ok = false;
+
+            for (uint32_t retry = 0; retry < 5U; retry++)
+            {
+                if (wrSensorReg16_8(array->reg_num, array->value))
+                {
+                    write_ok = true;
+                    break;
+                }
+
+                rt_thread_mdelay(1);
+            }
+
+            if (!write_ok)
+            {
+                if (ov5640_register_is_critical(array->reg_num))
+                {
+                    fsp_status = FSP_ERR_INVALID_DATA;
+                    break;
+                }
+            }
 
 #if CAMERA_CONFIG_WRITE_VERIFY
             rdSensorReg16_8(array->reg_num, &read_value);
@@ -792,41 +954,63 @@ static fsp_err_t bsp_camera_write_array (st_ov_reg_t * array)
 
 static fsp_err_t ov5640_configure_clocks()
 {
-    /* 0x3035 SC PLL CONTRL1 0x11 RW (Default: 0x11)
-     * <TBD> 0 is div 16 according to linux driver */
-    uint8_t sys_clock_div = 1;  // Bit[7:4]: System clock divider
-    uint8_t mipi_clock_div = 2; // Bit[3:0]: Scale divider for MIPI
-    uint8_t reg_3035_value = (uint8_t)(sys_clock_div << 4 | mipi_clock_div << 0);
+#if (CAMERA_OV5640_OUTPUT_MODE == CAMERA_OV5640_OUTPUT_MODE_1080P)
+    uint8_t reg_3035_value = 0;
+    uint8_t reg_3036_value = 0;
+    uint8_t reg_3037_value = 0;
+    uint8_t reg_3108_value = 0;
 
-    wrSensorReg16_8(0x3035, reg_3035_value); // Sys Clock Div: 1 --- MIPI Clock Div: 2
+    rdSensorReg16_8(0x3035, &reg_3035_value);
+    rdSensorReg16_8(0x3036, &reg_3036_value);
+    rdSensorReg16_8(0x3037, &reg_3037_value);
+    rdSensorReg16_8(0x3108, &reg_3108_value);
 
-    /* 0x3036 SC PLL CONTRL2 0x69 RW  (Default: 0x38)*/
-    uint8_t pll_multiplier = 140; // Bit[7:0]: PLL multiplier (4~252, even integer from 128+)
-    uint8_t reg_3036_value = (uint8_t)(pll_multiplier);
+    uint8_t sys_clock_div = (uint8_t)((reg_3035_value >> 4) & 0x0f);
+    uint8_t mipi_clock_div = (uint8_t)(reg_3035_value & 0x0f);
+    uint8_t pll_multiplier = reg_3036_value;
+    uint8_t pll_root_div = (reg_3037_value & 0x10U) ? 2U : 1U;
+    uint8_t pll_pre_div = (uint8_t)(reg_3037_value & 0x0f);
+    uint8_t const div_decode[] = {1, 2, 4, 8};
+    uint8_t pclk_root_div = div_decode[(reg_3108_value >> 4) & 0x03U];
+    uint8_t sclk2x_root_div = div_decode[(reg_3108_value >> 2) & 0x03U];
+    uint8_t sclk_root_div = div_decode[reg_3108_value & 0x03U];
 
-    wrSensorReg16_8(0x3036, reg_3036_value);  // PLL Multiplier: 140
+    if (0U == sys_clock_div) { sys_clock_div = 16U; }
+    if (0U == mipi_clock_div) { mipi_clock_div = 16U; }
+    if(!((pll_pre_div == 1) || (pll_pre_div == 2) || (pll_pre_div == 3) ||
+         (pll_pre_div == 4) || (pll_pre_div == 6) || (pll_pre_div == 8)))
+    { return FSP_ERR_ASSERTION; }
 
-    /* 0x3037 SC PLL CONTRL3 0x03 RW (Default: 0x13)*/
-    uint8_t pll_root_div = 2; // Bit[4]: PLL root divider --- 0: Bypass, 1: Divided by 2
-    uint8_t pll_pre_div = 3;  // Bit[3:0]: PLL pre-divider: 1,2,3,4,6,8
-    uint8_t reg_3037_value = (uint8_t)((pll_root_div==2) << 4 | (pll_pre_div) << 0);
+    uint32_t base_pll_hz = (((uint32_t)24000000 / (pll_root_div * pll_pre_div)) * pll_multiplier);
+    if(!(800000000 >= base_pll_hz)){ return FSP_ERR_ASSERTION; }
 
-    wrSensorReg16_8(0x3037, reg_3037_value); // PLL 2x-root-div: Enabled --- PLL Pre-div: 3
+    uint32_t sys_clk_hz = base_pll_hz / (uint32_t)(sys_clock_div * sclk2x_root_div * sclk_root_div);
+    uint32_t mipi_clk_hz = base_pll_hz / (uint32_t)(mipi_clock_div * pclk_root_div);
+    FSP_PARAMETER_NOT_USED(sys_clk_hz);
+    FSP_PARAMETER_NOT_USED(mipi_clk_hz);
+
+    return FSP_SUCCESS;
+#else
+    uint8_t sys_clock_div = 1;
+    uint8_t mipi_clock_div = 2;
+    uint8_t pll_multiplier = 140;
+    uint8_t pll_root_div = 2;
+    uint8_t pll_pre_div = 3;
+    uint8_t pclk_root_div = 1;
+    uint8_t sclk2x_root_div = 1;
+    uint8_t sclk_root_div = 2;
+    uint8_t reg_3108_div_lut[] = {0xF, 0, 1, 0xF, 2, 0xF, 0xF, 0xF, 3};
+
+    wrSensorReg16_8(0x3035, (uint8_t)((sys_clock_div << 4) | mipi_clock_div));
+    wrSensorReg16_8(0x3036, pll_multiplier);
+    wrSensorReg16_8(0x3037, (uint8_t)(((pll_root_div == 2U) ? 1U : 0U) << 4 | pll_pre_div));
+    wrSensorReg16_8(0x3108, (uint8_t)(reg_3108_div_lut[pclk_root_div] << 4 |
+                                      reg_3108_div_lut[sclk2x_root_div] << 2 |
+                                      reg_3108_div_lut[sclk_root_div]));
 
     if(!((pll_pre_div == 1) || (pll_pre_div == 2) || (pll_pre_div == 3) || \
          (pll_pre_div == 4) || (pll_pre_div == 6) || (pll_pre_div == 8)))
     { return FSP_ERR_ASSERTION; }
-
-    /* 0x3108 SYSTEM ROOT DIVIDER 0x16 RW - Pad Clock Divider for SCCB Clock (Default: 0x01)*/
-    uint8_t pclk_root_div   = 1; // Bit[5:4]: PCLK root divider (00: 1, 01: 2, 10: 4, 11: 8)
-    uint8_t sclk2x_root_div = 1; // Bit[3:2]: sclk2x root divider (00: 1, 01: 2, 10: 4, 11: 8)
-    uint8_t sclk_root_div   = 2; // Bit[1:0]: SCLK root divider (00: 1, 01: 2, 10: 4, 11: 8)
-    uint8_t reg_3108_div_lut[] = {0xF, 0, 1, 0xF, 2, 0xF, 0xF, 0xF, 3}; // 1, 2, 4, 8 are valid
-    uint8_t reg_3108_value = (uint8_t)(reg_3108_div_lut[pclk_root_div] << 4 | \
-            reg_3108_div_lut[sclk2x_root_div] << 2 | \
-            reg_3108_div_lut[sclk_root_div] << 0);
-
-    wrSensorReg16_8(0x3108, reg_3108_value); // system divider
 
     if(!(reg_3108_div_lut[pclk_root_div] < 0xF)){ return FSP_ERR_ASSERTION; }
     if(!(reg_3108_div_lut[sclk2x_root_div] < 0xF)){ return FSP_ERR_ASSERTION; }
@@ -837,9 +1021,10 @@ static fsp_err_t ov5640_configure_clocks()
 
     uint32_t sys_clk_hz = base_pll_hz/ (uint32_t)(sys_clock_div  * sclk2x_root_div * sclk_root_div); (void)sys_clk_hz;
     uint32_t mipi_clk_hz = base_pll_hz / (uint32_t)(mipi_clock_div * pclk_root_div);
-    if(!(sys_clk_hz >= mipi_clk_hz)){ return FSP_ERR_ASSERTION; }
+    FSP_PARAMETER_NOT_USED(mipi_clk_hz);
 
     return FSP_SUCCESS;
+#endif
 }
 
 /**
@@ -900,23 +1085,536 @@ static bool camera_capture_buffer_is_valid(uint8_t const * p_buffer)
     return false;
 }
 
+static uint8_t * camera_vin_buffer_by_index(uint32_t index)
+{
+    switch (index)
+    {
+        case 0:
+            return &vin_image_buffer_1[0];
+        case 1:
+            return &vin_image_buffer_2[0];
+        case 2:
+            return &vin_image_buffer_3[0];
+        default:
+            return NULL;
+    }
+}
+
+static uint8_t * camera_vin_completed_buffer_get(void)
+{
+    uint32_t mailbox = R_VIN->MS_b.FMS;
+
+    return camera_vin_buffer_by_index(mailbox);
+}
+
 void camera_image_buffer_initialize(void)
 {
     rt_memset(camera_capture_image_rgb565, 0x0, sizeof(camera_capture_image_rgb565));
     p_camera_capture_buffer_stored   = NULL;
     g_camera_frame_sequence          = 0;
     g_camera_frame_sequence_processed = 0;
-    g_camera_invalid_buffer_count    = 0;
+    g_camera_capture_output_width    = CAMERA_CAPTURE_IMAGE_WIDTH;
+    g_camera_capture_output_height   = CAMERA_CAPTURE_IMAGE_HEIGHT;
+    g_camera_sensor_source_width     = CAMERA_ACTIVE_IMAGE_WIDTH;
+    g_camera_sensor_source_height    = CAMERA_ACTIVE_IMAGE_HEIGHT;
+    g_camera_vin_window_width        = CAMERA_ACTIVE_IMAGE_WIDTH;
+    g_camera_vin_window_height       = CAMERA_ACTIVE_IMAGE_HEIGHT;
+    g_camera_sensor_source_mode      = CAMERA_OV5640_DEFAULT_SENSOR_SOURCE;
 }
 
-void camera_capture_start(void)
+fsp_err_t camera_capture_start(void)
 {
-    R_VIN_CaptureStart(&g_cam_vin_ctrl, &camera_capture_image_rgb565[0]);
+    fsp_err_t fsp_status;
+
+    camera_vin_configure_progressive_csi();
+
+    fsp_status = R_VIN_CaptureStart(&g_cam_vin_ctrl, NULL);
+
+    if (FSP_SUCCESS == fsp_status)
+    {
+        camera_vin_apply_runtime_geometry();
+        rt_thread_mdelay(10);
+        ov5640_stream_on();
+    }
+
+    return fsp_status;
+}
+
+void camera_capture_stream_pause(void)
+{
+    ov5640_stream_off();
+
+    for (uint32_t i = 0; i < 100U; i++)
+    {
+        if (0U == R_VIN->MS_b.CA)
+        {
+            break;
+        }
+
+        rt_thread_mdelay(1);
+    }
+}
+
+void camera_capture_stream_resume(void)
+{
+    R_VIN->INTS = R_VIN_INTS_FOS_Msk | R_VIN_INTS_ARES_Msk | R_VIN_INTS_FIS2_Msk;
+    ov5640_stream_on();
+}
+
+void camera_capture_stream_pause_vin(void)
+{
+    R_VIN->FC_b.CC = 0;
+    R_VIN->INTS = R_VIN_INTS_FOS_Msk | R_VIN_INTS_ARES_Msk | R_VIN_INTS_FIS2_Msk;
+}
+
+void camera_capture_stream_resume_vin(void)
+{
+    R_VIN->INTS = R_VIN_INTS_FOS_Msk | R_VIN_INTS_ARES_Msk | R_VIN_INTS_FIS2_Msk;
+    R_VIN->FC_b.CC = 1;
+}
+
+static uint16_t camera_vin_scale_factor(uint16_t source, uint16_t destination)
+{
+    uint32_t factor = (((uint32_t)source * CAMERA_VIN_UDS_SCALE_ONE) + ((uint32_t)destination / 2U)) /
+                      (uint32_t)destination;
+
+    if (factor == 0U)
+    {
+        factor = 1U;
+    }
+    if (factor > 0xffffU)
+    {
+        factor = 0xffffU;
+    }
+
+    return (uint16_t)factor;
+}
+
+static void camera_vin_apply_scale(uint16_t width, uint16_t height)
+{
+    uint16_t source_width = g_camera_vin_window_width;
+    uint16_t source_height = g_camera_vin_window_height;
+    uint16_t hfactor = camera_vin_scale_factor(source_width, width);
+    uint16_t vfactor = camera_vin_scale_factor(source_height, height);
+
+    R_VIN->IS = width;
+    R_VIN->UDS_SCALE = ((uint32_t)hfactor << 16) | (uint32_t)vfactor;
+    R_VIN->UDS_CLIP_SIZE = ((uint32_t)width << 16) | (uint32_t)height;
+    R_VIN->MC_b.SCLE = ((width == source_width) && (height == source_height)) ? 0U : 1U;
+}
+
+static uint16_t camera_align_down_even(uint32_t value)
+{
+    if (value < 2U)
+    {
+        return 2U;
+    }
+
+    return (uint16_t)(value & ~1U);
+}
+
+static void camera_vin_configure_source_window(uint16_t output_width, uint16_t output_height)
+{
+    uint16_t source_width = g_camera_sensor_source_width;
+    uint16_t source_height = g_camera_sensor_source_height;
+    uint16_t window_width = source_width;
+    uint16_t window_height = source_height;
+    uint16_t start_x = 0;
+    uint16_t start_y = 0;
+    uint32_t source_ratio;
+    uint32_t output_ratio;
+
+    if ((output_width > 0U) && (output_height > 0U))
+    {
+        source_ratio = (uint32_t)source_width * (uint32_t)output_height;
+        output_ratio = (uint32_t)source_height * (uint32_t)output_width;
+
+        if (source_ratio > output_ratio)
+        {
+            window_width = camera_align_down_even(((uint32_t)source_height * (uint32_t)output_width) /
+                                                  (uint32_t)output_height);
+            start_x = (uint16_t)(((uint32_t)source_width - (uint32_t)window_width) / 2U);
+            start_x = (uint16_t)(start_x & ~1U);
+        }
+        else if (source_ratio < output_ratio)
+        {
+            window_height = camera_align_down_even(((uint32_t)source_width * (uint32_t)output_height) /
+                                                   (uint32_t)output_width);
+            start_y = (uint16_t)(((uint32_t)source_height - (uint32_t)window_height) / 2U);
+            start_y = (uint16_t)(start_y & ~1U);
+        }
+    }
+
+    g_camera_vin_window_width = window_width;
+    g_camera_vin_window_height = window_height;
+    R_VIN->SLPRC = start_y;
+    R_VIN->ELPRC = (uint32_t)start_y + (uint32_t)window_height - 1U;
+    R_VIN->SPPRC = start_x;
+    R_VIN->EPPRC = (uint32_t)start_x + (uint32_t)window_width - 1U;
+}
+
+static void camera_vin_reset_internal_state(void)
+{
+    R_VIN->MC_b.ST = 0x1;
+    (void) R_VIN->MC_b.ST;
+    (void) R_VIN->MC_b.ST;
+    (void) R_VIN->MC_b.ST;
+    (void) R_VIN->MC_b.ST;
+    (void) R_VIN->MC_b.ST;
+    (void) R_VIN->MC_b.ST;
+    (void) R_VIN->MC_b.ST;
+    (void) R_VIN->MC_b.ST;
+    (void) R_VIN->MC_b.ST;
+    (void) R_VIN->MC_b.ST;
+}
+
+static void camera_vin_restore_state(bool enable_module, bool continuous_capture)
+{
+    R_VIN->INTS = R_VIN_INTS_FOS_Msk | R_VIN_INTS_ARES_Msk | R_VIN_INTS_FIS2_Msk;
+
+    if (enable_module)
+    {
+        camera_vin_reset_internal_state();
+        R_VIN->MC_b.ME = 1;
+    }
+
+    if (continuous_capture)
+    {
+        R_VIN->FC_b.CC = 1;
+    }
+}
+
+static fsp_err_t camera_vin_wait_capture_idle(void)
+{
+    for (uint32_t i = 0; i < CAMERA_VIN_WAIT_TIMEOUT_MS; i++)
+    {
+        if (0U == R_VIN->MS_b.CA)
+        {
+            return FSP_SUCCESS;
+        }
+
+        rt_thread_mdelay(1);
+    }
+
+    return FSP_ERR_TIMEOUT;
+}
+
+static fsp_err_t camera_vin_wait_axi_idle(void)
+{
+    for (uint32_t i = 0; i < CAMERA_VIN_WAIT_TIMEOUT_MS; i++)
+    {
+        if (0U == R_VIN->MTCSTOP_b.OUTSTAND)
+        {
+            return FSP_SUCCESS;
+        }
+
+        rt_thread_mdelay(1);
+    }
+
+    return FSP_ERR_TIMEOUT;
+}
+
+static void camera_mipi_csi_stop_rx(void)
+{
+    if (R_MIPI_CSI->MCT3_b.RXEN != 0U)
+    {
+        R_MIPI_CSI->MCT3_b.RXEN = 0;
+        R_MIPI_CSI->RTCT_b.VSRST = 1;
+        for (uint32_t i = 0; i < CAMERA_VIN_WAIT_TIMEOUT_MS; i++)
+        {
+            if (R_MIPI_CSI->RTST_b.VSRSTS == 0U)
+            {
+                break;
+            }
+            rt_thread_mdelay(1);
+        }
+    }
+}
+
+static void camera_mipi_csi_start_rx(void)
+{
+    for (uint32_t i = 0; i < CAMERA_VIN_WAIT_TIMEOUT_MS; i++)
+    {
+        if (R_MIPI_CSI->RTST_b.VSRSTS == 0U)
+        {
+            break;
+        }
+        rt_thread_mdelay(1);
+    }
+
+    R_MIPI_CSI->RXSC = R_MIPI_CSI_RXSC_RACTDETC_Msk;
+    R_MIPI_CSI->MCT3_b.RXEN = 1;
+}
+
+static void camera_sensor_source_select(uint16_t width, uint16_t height, camera_sensor_source_mode_t * mode)
+{
+#if CAMERA_OV5640_DYNAMIC_SENSOR_SOURCE_ENABLE
+    bool is_wide_16_9;
+#endif
+
+    if ((mode == NULL) || (width == 0U) || (height == 0U))
+    {
+        return;
+    }
+
+#if CAMERA_OV5640_DYNAMIC_SENSOR_SOURCE_ENABLE
+    is_wide_16_9 = (((uint32_t)width * 9U) == ((uint32_t)height * 16U));
+    if (((width <= BSP_CAM_VGA_WIDTH) && (height <= BSP_CAM_VGA_HEIGHT)) &&
+        (is_wide_16_9 == false))
+    {
+        *mode = CAMERA_SENSOR_SOURCE_VGA;
+    }
+    else
+    {
+        *mode = CAMERA_SENSOR_SOURCE_1080P;
+    }
+#else
+    *mode = CAMERA_OV5640_DEFAULT_SENSOR_SOURCE;
+#endif
+}
+
+static void camera_sensor_source_size(camera_sensor_source_mode_t mode, uint16_t * width, uint16_t * height)
+{
+    uint16_t source_width;
+    uint16_t source_height;
+
+    switch (mode)
+    {
+        case CAMERA_SENSOR_SOURCE_VGA:
+            source_width = BSP_CAM_VGA_WIDTH;
+            source_height = BSP_CAM_VGA_HEIGHT;
+            break;
+        case CAMERA_SENSOR_SOURCE_1080P:
+        default:
+            source_width = CAMERA_OV5640_RUNTIME_MAX_WIDTH;
+            source_height = CAMERA_OV5640_RUNTIME_MAX_HEIGHT;
+            break;
+    }
+
+    if (width != NULL)
+    {
+        *width = source_width;
+    }
+    if (height != NULL)
+    {
+        *height = source_height;
+    }
+}
+
+static fsp_err_t camera_sensor_source_apply_stopped(camera_sensor_source_mode_t mode,
+                                                    rt_uint16_t * width,
+                                                    rt_uint16_t * height)
+{
+    rt_err_t err = ov5640_tuning_apply_sensor_mode_stopped(camera_sensor_source_name(mode), width, height);
+
+    return (err == RT_EOK) ? FSP_SUCCESS : FSP_ERR_INVALID_DATA;
+}
+
+static const char * camera_sensor_source_name(camera_sensor_source_mode_t mode)
+{
+    switch (mode)
+    {
+        case CAMERA_SENSOR_SOURCE_QCIF:
+            return "qcif";
+        case CAMERA_SENSOR_SOURCE_QVGA:
+            return "qvga";
+        case CAMERA_SENSOR_SOURCE_VGA:
+            return "vga";
+        case CAMERA_SENSOR_SOURCE_720P:
+            return "720p";
+        case CAMERA_SENSOR_SOURCE_1080P:
+        default:
+            return "1080p";
+    }
+}
+
+fsp_err_t camera_capture_scale_set(uint16_t width, uint16_t height)
+{
+    bool was_enabled;
+    bool was_continuous;
+    bool source_mode_changed;
+    bool forced_vin_stop = false;
+    camera_sensor_source_mode_t requested_mode;
+    rt_uint16_t requested_source_width = 0;
+    rt_uint16_t requested_source_height = 0;
+    fsp_err_t err;
+
+    if ((width == 0U) || (height == 0U) ||
+        (width > CAMERA_OV5640_RUNTIME_MAX_WIDTH) || (height > CAMERA_OV5640_RUNTIME_MAX_HEIGHT) ||
+        ((width % CAMERA_VIN_SCALE_WIDTH_ALIGN) != 0U) || ((height & 1U) != 0U))
+    {
+        return FSP_ERR_INVALID_ARGUMENT;
+    }
+
+    requested_mode = g_camera_sensor_source_mode;
+    camera_sensor_source_select(width, height, &requested_mode);
+    camera_sensor_source_size(requested_mode, &requested_source_width, &requested_source_height);
+    if ((width > requested_source_width) || (height > requested_source_height))
+    {
+        return FSP_ERR_INVALID_ARGUMENT;
+    }
+    source_mode_changed = (requested_mode != g_camera_sensor_source_mode);
+
+    was_enabled = (R_VIN->MC_b.ME != 0U);
+    was_continuous = (R_VIN->FC_b.CC != 0U);
+    if (source_mode_changed)
+    {
+        ov5640_stream_off();
+        rt_thread_mdelay(5);
+    }
+
+    if (was_continuous)
+    {
+        R_VIN->FC_b.CC = 0;
+        R_VIN->INTS = R_VIN_INTS_FOS_Msk | R_VIN_INTS_ARES_Msk | R_VIN_INTS_FIS2_Msk;
+    }
+
+    err = camera_vin_wait_capture_idle();
+    if (err != FSP_SUCCESS)
+    {
+        if (source_mode_changed)
+        {
+            R_VIN->FC_b.CC = 0;
+            R_VIN->MC_b.ME = 0;
+            camera_mipi_csi_stop_rx();
+            forced_vin_stop = true;
+        }
+        else
+        {
+            camera_vin_restore_state(was_enabled, was_continuous);
+            return err;
+        }
+    }
+
+    if (was_enabled && (forced_vin_stop == false))
+    {
+        R_VIN->MC_b.ME = 0;
+        err = camera_vin_wait_axi_idle();
+        if (err != FSP_SUCCESS)
+        {
+            camera_vin_restore_state(was_enabled, was_continuous);
+            return err;
+        }
+    }
+
+    if (source_mode_changed)
+    {
+        camera_mipi_csi_stop_rx();
+        err = camera_sensor_source_apply_stopped(requested_mode,
+                                                &requested_source_width,
+                                                &requested_source_height);
+        if ((err != FSP_SUCCESS) || (requested_source_width == 0U) || (requested_source_height == 0U))
+        {
+            (void)camera_sensor_source_apply_stopped(g_camera_sensor_source_mode, RT_NULL, RT_NULL);
+            camera_mipi_csi_start_rx();
+            camera_vin_restore_state(was_enabled, was_continuous);
+            if (was_continuous)
+            {
+                ov5640_stream_on();
+            }
+            return FSP_ERR_INVALID_DATA;
+        }
+
+        g_camera_sensor_source_mode = requested_mode;
+        g_camera_sensor_source_width = requested_source_width;
+        g_camera_sensor_source_height = requested_source_height;
+    }
+
+    camera_vin_configure_source_window(width, height);
+    camera_vin_apply_scale(width, height);
+    g_camera_capture_output_width = width;
+    g_camera_capture_output_height = height;
+    p_camera_capture_buffer_stored = NULL;
+    g_camera_frame_sequence_processed = g_camera_frame_sequence;
+    if (source_mode_changed)
+    {
+        camera_mipi_csi_start_rx();
+        camera_vin_restore_state(was_enabled, was_continuous);
+        rt_thread_mdelay(5);
+        if (was_continuous)
+        {
+            ov5640_stream_on();
+        }
+    }
+    else
+    {
+        camera_vin_restore_state(was_enabled, was_continuous);
+    }
+    return FSP_SUCCESS;
+}
+
+uint16_t camera_capture_output_width_get(void)
+{
+    return g_camera_capture_output_width;
+}
+
+uint16_t camera_capture_output_height_get(void)
+{
+    return g_camera_capture_output_height;
+}
+
+uint32_t camera_capture_output_bytes_get(void)
+{
+    return (uint32_t)g_camera_capture_output_width *
+           (uint32_t)g_camera_capture_output_height *
+           (uint32_t)CAMERA_IMAGE_BYTE_PER_PIXEL;
+}
+
+uint32_t camera_capture_buffer_capacity_get(void)
+{
+    return VIN_BYTES_PER_FRAME;
+}
+
+static void camera_vin_configure_progressive_csi(void)
+{
+    R_MIPI_CSI->MCT0_b.VDLN = 2;
+    R_MIPI_PHY->DPHYTIM3_b.THSSETT = 16;
+    R_VIN->MC_b.IM = VIN_INTERLACE_MODE_ODD_FIELD_CAPTURE;
+    R_VIN->CSIFLD = 0;
+    camera_vin_apply_runtime_geometry();
+    R_VIN->IE = R_VIN_IE_FME_Msk;
+    R_VIN->INTS = R_VIN_INTS_FOS_Msk | R_VIN_INTS_ARES_Msk | R_VIN_INTS_FIS2_Msk;
+}
+
+static void camera_vin_apply_runtime_geometry(void)
+{
+    camera_vin_configure_source_window(g_camera_capture_output_width, g_camera_capture_output_height);
+    camera_vin_apply_scale(g_camera_capture_output_width, g_camera_capture_output_height);
+}
+
+static bool ov5640_register_is_critical(uint16_t reg)
+{
+    if (((reg >= 0x3000U) && (reg <= 0x3039U)) ||
+        ((reg >= 0x3800U) && (reg <= 0x3824U)) ||
+        ((reg >= 0x4200U) && (reg <= 0x4202U)) ||
+        ((reg >= 0x4300U) && (reg <= 0x430DU)) ||
+        ((reg >= 0x4602U) && (reg <= 0x460CU)) ||
+        ((reg >= 0x4800U) && (reg <= 0x4837U)))
+    {
+        return true;
+    }
+
+    switch (reg)
+    {
+        case 0x3103:
+        case 0x3108:
+        case 0x5001:
+        case 0x501f:
+        case 0x503d:
+            return true;
+        default:
+            return false;
+    }
 }
 
 uint32_t camera_data_ready_buffer_pointer_get(void)
 {
     return (uint32_t)p_camera_capture_buffer_stored;
+}
+
+uint32_t camera_frame_sequence_get(void)
+{
+    return g_camera_frame_sequence;
 }
 
 uint32_t camera_capture_post_process(void)
@@ -934,12 +1632,27 @@ uint32_t camera_capture_post_process(void)
 
     if (!camera_capture_buffer_is_valid(p_buffer))
     {
+        g_camera_frame_sequence_processed = frame_sequence;
         return 0;
     }
 
-    /* The VIN hardware mailboxes already hold a complete frame in no-cache SDRAM.
-     * Keep the latest completed buffer pointer and let the display path copy from it directly. */
+    camera_frame_cache_discard(p_buffer, camera_capture_output_bytes_get());
+
     g_camera_frame_sequence_processed = frame_sequence;
+    return 1;
+}
+
+uint32_t camera_processed_frame_get(uint8_t const ** pp_buffer, uint32_t * p_sequence)
+{
+    uint8_t const * p_buffer = (uint8_t const *) p_camera_capture_buffer_stored;
+
+    if ((NULL == pp_buffer) || (NULL == p_sequence) || !camera_capture_buffer_is_valid(p_buffer))
+    {
+        return 0;
+    }
+
+    *pp_buffer  = p_buffer;
+    *p_sequence = g_camera_frame_sequence_processed;
     return 1;
 }
 
@@ -954,16 +1667,19 @@ void cam_vin_callback(capture_callback_args_t *p_args)
     {
         if (interrupt_status.bits.frame_complete)
         {
+            uint8_t * p_frame = p_args->p_buffer;
+
+            if (!camera_capture_buffer_is_valid(p_frame))
+            {
+                p_frame = camera_vin_completed_buffer_get();
+            }
+
             /* Capture Complete - Process data buffer pointer and index */
 // #ifndef VIN_CFG_USE_RUNTIME_BUFFER
-            if (camera_capture_buffer_is_valid(p_args->p_buffer))
+            if (camera_capture_buffer_is_valid(p_frame))
             {
-                p_camera_capture_buffer_stored = p_args->p_buffer;
+                p_camera_capture_buffer_stored = p_frame;
                 g_camera_frame_sequence++;
-            }
-            else
-            {
-                g_camera_invalid_buffer_count++;
             }
 //             rt_completion_done(&ceu_completion);
 // #endif
@@ -979,18 +1695,15 @@ void cam_mipi_csi_callback(mipi_csi_callback_args_t *p_args)
 
 int OV5640_af_init(void)
 {
-    uint8_t val;
     uint8_t reg3029 = 0;
     uint32_t total_len = sizeof(af_firmware_regs) / sizeof(af_firmware_regs[0]);
     uint32_t offset = 0;
-    rt_kprintf("[E] Writing firmware to OV5640 ...\n");
 
     wrSensorReg16_8(0x3000, 0x20);
 
     while (offset < total_len) {
         uint32_t chunk_len = (total_len - offset > BURST_SIZE) ? BURST_SIZE : (total_len - offset);
-        if (!wrSensorReg16_Multi(FOCUS_FW_DOWNLOAD_ADDR + offset, &af_firmware_regs[offset], chunk_len)) {
-            rt_kprintf("[E] Firmware write failed at offset %d\n", offset);
+        if (!wrSensorReg16_Multi(FOCUS_FW_DOWNLOAD_ADDR + offset, (uint8_t *)&af_firmware_regs[offset], chunk_len)) {
             return -RT_ERROR;
         }
         offset += chunk_len;
@@ -1020,46 +1733,16 @@ int OV5640_af_init(void)
 
     if (reg3029 != 0x70)
     {
-        rt_kprintf("[E] Write Firmware Success\n");
         return RT_ERROR;
     }
-
-    rdSensorReg16_8(0x3000, &val);
-    rt_kprintf("MCU status 0x3000: 0x%02X\n", val);
-    if (((val >> 6) & 0x01) != 0 || ((val >> 5) & 0x01) != 0) {
-        rt_kprintf("[E] 0x3000 check failed: BIT6=%d, BIT5=%d\n", (val >> 6) & 0x01, (val >> 5) & 0x01);
-    }
-    rt_thread_mdelay(100);
-
-    rdSensorReg16_8(0x3004, &val);
-    rt_kprintf("MCU status 0x3004: 0x%02X\n", val);
-    if (((val >> 6) & 0x01) != 1 || ((val >> 5) & 0x01) != 1) {
-        rt_kprintf("[E] 0x3004 check failed: BIT6=%d, BIT5=%d\n", (val >> 6) & 0x01, (val >> 5) & 0x01);
-    }
-    rt_thread_mdelay(100);
-
-    rdSensorReg16_8(0x3001, &val);
-    rt_kprintf("AFC status 0x3001: 0x%02X\n", val);
-    if (((val >> 6) & 0x01) != 0) {
-        rt_kprintf("[E] 0x3001 check failed: BIT6=%d\n", (val >> 6) & 0x01);
-    }
-    rt_thread_mdelay(100);
-
-    rdSensorReg16_8(0x3005, &val);
-    rt_kprintf("AFC status 0x3005: 0x%02X\n", val);
-    if (((val >> 6) & 0x01) != 1) {
-        rt_kprintf("[E] 0x3005 check failed: BIT6=%d\n", (val >> 6) & 0x01);
-    }
-
-    rt_kprintf("[AF] OV5640 AF firmware initialized successfully\n");
     return RT_EOK;
 }
 
 int OV5640_auto_focus(void)
 {
-    uint8_t val;
-
-    wrSensorReg16_8(REG_AF_CMD_MAIN, 0x03);
+    if (!wrSensorReg16_8(REG_AF_CMD_MAIN, 0x03)) {
+        return -RT_ERROR;
+    }
 
     return RT_EOK;
 }
@@ -1067,7 +1750,6 @@ int OV5640_auto_focus(void)
 int OV5640_release_focus(void)
 {
     if (!wrSensorReg16_8(REG_AF_CMD_MAIN, 0x06)) {
-        rt_kprintf("[E/AF] Failed to release focus\n");
         return -RT_ERROR;
     }
     return RT_EOK;

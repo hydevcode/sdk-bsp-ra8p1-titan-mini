@@ -139,7 +139,7 @@ static rt_ssize_t ra_i2c_mst_xfer(struct rt_i2c_bus_device *bus,
             {
                 if (RT_EOK != validate_i2c_event(ra_i2c))
                 {
-                    LOG_E("POWER_CTL reg I2C read failed");
+                    LOG_E("I2C read event wait failed");
                     break;
                 }
             }
@@ -147,7 +147,7 @@ static rt_ssize_t ra_i2c_mst_xfer(struct rt_i2c_bus_device *bus,
             else
             {
                 /* Write API returns itself is not successful */
-                LOG_E("R_I2C_MASTER_Write API failed");
+                LOG_E("R_IIC_MASTER_Read API failed, err=%d", err);
                 break;
             }
         }
@@ -158,7 +158,7 @@ static rt_ssize_t ra_i2c_mst_xfer(struct rt_i2c_bus_device *bus,
             {
                 if (RT_EOK != validate_i2c_event(ra_i2c))
                 {
-                    LOG_E("POWER_CTL reg I2C write failed");
+                    LOG_E("I2C write event wait failed");
                     break;
                 }
             }
@@ -166,7 +166,7 @@ static rt_ssize_t ra_i2c_mst_xfer(struct rt_i2c_bus_device *bus,
             else
             {
                 /* Write API returns itself is not successful */
-                LOG_E("R_I2C_MASTER_Write API failed");
+                LOG_E("R_IIC_MASTER_Write API failed, err=%d", err);
                 break;
             }
         }

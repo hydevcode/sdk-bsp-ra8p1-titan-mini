@@ -1,4 +1,4 @@
-/*
+﻿/*
 * Copyright (c) 2006-2023, RT-Thread Development Team
 *
 * SPDX-License-Identifier: Apache-2.0
@@ -19,6 +19,23 @@
 #include <lwipopts.h>
 #include "r_layer3_switch.h"
 #include "r_rmac.h"
+#include "lwip/init.h"
+
+/*
+ * drv_eth.c must be compiled with exactly the same lwIP headers as the lwIP core
+ * it links against. The pbuf_type/pbuf_layer enum values differ between lwIP
+ * versions (e.g. PBUF_POOL == 3 in lwIP 2.0.x, but 0x182 in lwIP 2.1.x).
+ * A mismatch (e.g. a stale drv_eth.o built with lwIP-2.1.2 headers while the
+ * project links lwIP-2.0.3) makes pbuf_alloc() hit the "pbuf_alloc: erroneous
+ * type" assert in the RX path. Detect such a mismatch at compile time.
+ */
+#if defined(RT_USING_LWIP203) && (LWIP_VERSION != 0x020003FFU)
+#error "drv_eth: lwIP header version mismatch, expected lwIP 2.0.3 (RT_USING_LWIP203). Check lwIP include paths / do a clean rebuild."
+#endif
+#if defined(RT_USING_LWIP212) && (LWIP_VERSION != 0x020102FFU)
+#error "drv_eth: lwIP header version mismatch, expected lwIP 2.1.2 (RT_USING_LWIP212). Check lwIP include paths / do a clean rebuild."
+#endif
+
 
 #define MINIMUM_ETHERNET_FRAME_SIZE (60U)
 #define ETH_MAX_PACKET_SIZE (1536U)
@@ -26,7 +43,9 @@
 #define ETH_RX_BUF_SIZE ETH_MAX_PACKET_SIZE
 #define ETH_TX_BUF_SIZE ETH_MAX_PACKET_SIZE
 #define ETH_TX_DMA_BUF_SIZE (1536U)
-#define ETH_TX_POOL_COUNT (16U)
+#define ETH_TX_POOL_COUNT (64U)
+#define ETH_TX_ACQUIRE_RETRY_COUNT (256U)
+#define ETH_TX_ACQUIRE_RETRY_DELAY_US (2U)
 #define ETH_TOTAL_BUFFER_COUNT (192U)
 #define ETH_TX_DESC_RUNTIME_COUNT (8U)
 #define ETH_RX_DESC_RUNTIME_COUNT (32U)
@@ -58,6 +77,7 @@ static rmac_queue_info_t g_ether0_ts_queue_cache_safe[1];
 static rmac_queue_info_t g_ether0_tx_queue_list_cache_safe[2];
 static rmac_queue_info_t g_ether0_rx_queue_list_cache_safe[2];
 static uint8_t *g_ether0_pp_ether_buffers_cache_safe[ETH_TOTAL_BUFFER_COUNT];
+static uint8_t g_ether0_runtime_mac_address[6];
 
 static rmac_buffer_node_t g_ether0_buffer_node_list_cache_safe[ETH_TOTAL_BUFFER_COUNT] BSP_ALIGN_VARIABLE(32) BSP_PLACE_IN_SECTION(".ram_nocache");
 static layer3_switch_ts_reception_process_descriptor_t g_ether0_ts_descriptor_array0_cache_safe[8] BSP_ALIGN_VARIABLE(32) BSP_PLACE_IN_SECTION(".ram_nocache");
@@ -68,7 +88,7 @@ static layer3_switch_descriptor_t g_ether0_rx_descriptor_array1_cache_safe[ETH_R
 static uint8_t g_ether0_ether_buffers_cache_safe[ETH_TOTAL_BUFFER_COUNT][1536] BSP_ALIGN_VARIABLE(32) BSP_PLACE_IN_SECTION(".ram_nocache");
 static uint8_t g_eth_tx_buffers[ETH_TX_POOL_COUNT][ETH_TX_DMA_BUF_SIZE] BSP_ALIGN_VARIABLE(32) BSP_PLACE_IN_SECTION(".ram_nocache");
 
-static rt_uint32_t g_eth_tx_busy_mask;
+static rt_uint64_t g_eth_tx_busy_mask;
 static rt_uint32_t g_eth_tx_alloc_index;
 static rt_uint32_t g_eth_tx_inflight;
 
@@ -147,6 +167,33 @@ static void phy_log_partner_ability(uint8_t phy_index)
     }
 }
 
+static void eth_make_runtime_mac_address(void)
+{
+    bsp_unique_id_t const *unique_id = R_BSP_UniqueIdGet();
+    uint32_t hash = 2166136261UL;
+
+    for (rt_size_t i = 0; i < sizeof(unique_id->unique_id_bytes); i++)
+    {
+        hash ^= unique_id->unique_id_bytes[i];
+        hash *= 16777619UL;
+    }
+
+    g_ether0_runtime_mac_address[0] = 0x02U;
+    g_ether0_runtime_mac_address[1] = 0x11U;
+    g_ether0_runtime_mac_address[2] = 0x22U;
+    g_ether0_runtime_mac_address[3] = (uint8_t) (hash >> 16);
+    g_ether0_runtime_mac_address[4] = (uint8_t) (hash >> 8);
+    g_ether0_runtime_mac_address[5] = (uint8_t) hash;
+
+    LOG_I("runtime MAC %02x:%02x:%02x:%02x:%02x:%02x",
+          g_ether0_runtime_mac_address[0],
+          g_ether0_runtime_mac_address[1],
+          g_ether0_runtime_mac_address[2],
+          g_ether0_runtime_mac_address[3],
+          g_ether0_runtime_mac_address[4],
+          g_ether0_runtime_mac_address[5]);
+}
+
 static void eth_prepare_cache_safe_rmac_cfg(void)
 {
     const rmac_extended_cfg_t *p_src_extend = (const rmac_extended_cfg_t *) g_ether0_cfg.p_extend;
@@ -185,6 +232,9 @@ static void eth_prepare_cache_safe_rmac_cfg(void)
 
     g_ether0_cfg_cache_safe.pp_ether_buffers = g_ether0_pp_ether_buffers_cache_safe;
     g_ether0_cfg_cache_safe.p_extend = &g_ether0_extended_cfg_cache_safe;
+
+    eth_make_runtime_mac_address();
+    g_ether0_cfg_cache_safe.p_mac_address = g_ether0_runtime_mac_address;
 }
 
 static void eth_tx_pool_init(void)
@@ -205,7 +255,7 @@ static void eth_tx_buffer_release(rt_uint8_t *buffer)
     uintptr_t addr;
     uintptr_t offset;
     rt_size_t idx;
-    rt_uint32_t bit;
+    rt_uint64_t bit;
 
     if (buffer == RT_NULL)
     {
@@ -232,7 +282,7 @@ static void eth_tx_buffer_release(rt_uint8_t *buffer)
         return;
     }
 
-    bit = (rt_uint32_t) 1U << idx;
+    bit = (rt_uint64_t) 1ULL << idx;
     if ((g_eth_tx_busy_mask & bit) != 0U)
     {
         g_eth_tx_busy_mask &= ~bit;
@@ -265,7 +315,7 @@ static rt_uint8_t *eth_tx_buffer_acquire(void)
         for (count = 0; count < ETH_TX_POOL_COUNT; count++)
         {
             rt_uint32_t idx = (g_eth_tx_alloc_index + count) % ETH_TX_POOL_COUNT;
-            rt_uint32_t bit = (rt_uint32_t) 1U << idx;
+            rt_uint64_t bit = (rt_uint64_t) 1ULL << idx;
 
             if ((g_eth_tx_busy_mask & bit) == 0U)
             {
@@ -279,6 +329,30 @@ static rt_uint8_t *eth_tx_buffer_acquire(void)
     }
 
     return buffer;
+}
+
+static rt_uint8_t *eth_tx_buffer_acquire_wait(void)
+{
+    rt_uint8_t *buffer;
+    rt_uint32_t retry;
+
+    buffer = eth_tx_buffer_acquire();
+    if (buffer != RT_NULL)
+    {
+        return buffer;
+    }
+
+    for (retry = 0; retry < ETH_TX_ACQUIRE_RETRY_COUNT; retry++)
+    {
+        rt_hw_us_delay(ETH_TX_ACQUIRE_RETRY_DELAY_US);
+        buffer = eth_tx_buffer_acquire();
+        if (buffer != RT_NULL)
+        {
+            return buffer;
+        }
+    }
+
+    return RT_NULL;
 }
 
 #if defined(SOC_SERIES_R9A07G0)
@@ -501,10 +575,9 @@ rt_err_t rt_ra_eth_tx(rt_device_t dev, struct pbuf *p)
 
     FSP_PARAMETER_NOT_USED(dev);
 
-    buffer = eth_tx_buffer_acquire();
+    buffer = eth_tx_buffer_acquire_wait();
     if (buffer == RT_NULL)
     {
-        LOG_W("No free TX DMA buffer");
         return (err_t) ERR_USE;
     }
 
@@ -728,6 +801,7 @@ void user_ether0_callback(ether_callback_args_t *p_args)
 static int rt_hw_ra_eth_init(void)
 {
     rt_err_t state = RT_EOK;
+    rt_uint16_t eth_flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP;
 
     ra_eth_device.parent.parent.init = NULL;
     ra_eth_device.parent.parent.open = rt_ra_eth_open;
@@ -744,11 +818,25 @@ static int rt_hw_ra_eth_init(void)
     eth_tx_pool_init();
     rt_ra_eth_init();
 
+#if LWIP_IGMP
+    eth_flags |= NETIF_FLAG_IGMP;
+#endif
+
+    if (g_link_status != 0U)
+    {
+        eth_flags |= ETHIF_LINK_PHYUP;
+    }
+
     /* register eth device */
-    state = eth_device_init(&(ra_eth_device.parent), "e0");
+    state = eth_device_init_with_flag(&(ra_eth_device.parent), "e0", eth_flags);
     if (RT_EOK == state)
     {
         LOG_D("emac device init success");
+        if (g_link_status != 0U)
+        {
+            LOG_I("Initial PHY link up, notify network stack");
+            (void) eth_device_linkchange(&ra_eth_device.parent, RT_TRUE);
+        }
     }
     else
     {

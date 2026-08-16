@@ -23,9 +23,6 @@ FSP_CPP_HEADER
 #define OV5640_CHIPID_HIGH    (0x300a)
 #define OV5640_CHIPID_LOW     (0x300b)
 
-#define BMP                      (0)
-#define JPEG                     (1)
-
 #define OV7670                   (0)
 #define MT9D111_A                (1)
 #define OV7675                   (2)

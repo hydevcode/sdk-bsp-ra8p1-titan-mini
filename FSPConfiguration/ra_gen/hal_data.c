@@ -652,7 +652,7 @@ const dmac_extended_cfg_t g_transfer5_extend =
 #else
     .irq                 = FSP_INVALID_VECTOR,
 #endif
-    .ipl                 = (12),
+    .ipl                 = (5),
     .channel             = 1,
     .p_callback          = pdm_rxi_dmac_isr,
     .p_context           = &g_pdm0_ctrl,

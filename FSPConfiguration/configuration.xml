@@ -2827,7 +2827,7 @@
     <module id="module.driver.vin.74328815">
       <property id="module.driver.vin.name" value="g_cam_vin"/>
       <property id="module.driver.vin.input_ctrl.cfg_bits.color_space_convert_bypass" value="enum.mcu.common_types.true_false_boolean.false"/>
-      <property id="module.driver.vin.input_ctrl.cfg_bits.interlace_mode" value="enum.mcu.vin.input_ctrl.cfg_bits.interlace_mode.odd_even"/>
+      <property id="module.driver.vin.input_ctrl.cfg_bits.interlace_mode" value="enum.mcu.vin.input_ctrl.cfg_bits.interlace_mode.odd"/>
       <property id="module.driver.vin.input_ctrl.cfg_bits.big_endian" value="enum.mcu.common_types.big_endian.false"/>
       <property id="module.driver.vin.input_ctrl.cfg_bits.dithering_mode" value="enum.mcu.vin.input_ctrl.cfg_bits.dithering_mode.with_addition"/>
       <property id="module.driver.vin.input_ctrl.cfg_bits.input_mode" value="enum.mcu.vin.input_ctrl.cfg_bits.input_mode.ycbcr422_8_bit"/>
@@ -2840,7 +2840,7 @@
       <property id="module.driver.vin.input_ctrl.image.size.horizontal" value="640"/>
       <property id="module.driver.vin.input_ctrl.csi_mode_bits.virtual_channel" value="0"/>
       <property id="module.driver.vin.input_ctrl.csi_mode_bits.sign_extend_disable" value="enum.mcu.common_types.true_false_boolean.true"/>
-      <property id="module.driver.vin.input_ctrl.csi_detect_bits.field_detect_enable" value="enum.mcu.common_types.enabled_boolean.enabled"/>
+      <property id="module.driver.vin.input_ctrl.csi_detect_bits.field_detect_enable" value="enum.mcu.common_types.enabled_boolean.disabled"/>
       <property id="module.driver.vin.input_ctrl.csi_detect_bits.even_field_number" value="0"/>
       <property id="module.driver.vin.output_ctrl.image_buffer_1_name" value="vin_image_buffer_1"/>
       <property id="module.driver.vin.output_ctrl.image_buffer_2_name" value="vin_image_buffer_2"/>

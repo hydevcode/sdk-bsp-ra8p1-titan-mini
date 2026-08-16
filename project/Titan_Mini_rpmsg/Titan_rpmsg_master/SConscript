@@ -1,0 +1,63 @@
+# for module compiling
+import os
+import re
+Import('RTT_ROOT')
+Import('rtconfig')
+from building import *
+from gcc import *
+
+cwd = GetCurrentDir()
+src = []
+CPPPATH = [cwd]
+group = []
+list = os.listdir(cwd)
+
+def rtconfig_macro_value(name, default = '0'):
+    config_path = os.path.join(cwd, 'rtconfig.h')
+    pattern = re.compile(r'^\s*#\s*define\s+' + re.escape(name) + r'\s+(.+?)\s*(?:/\*.*)?$')
+
+    try:
+        with open(config_path, 'r') as f:
+            for line in f:
+                match = pattern.match(line)
+                if match:
+                    return match.group(1).strip()
+    except IOError:
+        pass
+
+    return default
+
+use_handwriting_model = (rtconfig_macro_value('TITAN_USE_HANDWRITING_MODEL') == '1')
+model_dir_name = 'handwriting' if use_handwriting_model else 'face'
+model_dir = os.path.join(cwd, 'src', 'models', model_dir_name)
+model_src_glob = './src/models/%s/*.c' % model_dir_name
+
+if rtconfig.PLATFORM in ['iccarm'] + GetGCCLikePLATFORM():
+    if rtconfig.PLATFORM == 'iccarm' or GetOption('target') != 'mdk5':
+        CPPPATH = [
+            cwd,
+            os.path.join(cwd, 'src'),
+            os.path.join(cwd, 'src', 'models'),
+            model_dir,
+        ]
+
+        app_src = Glob('./src/*.c')
+        if use_handwriting_model:
+            app_src = [s for s in app_src if os.path.basename(str(s)) != 'face_detect_tcp.c']
+        else:
+            app_src = [s for s in app_src if os.path.basename(str(s)) != 'handwriting_model.c']
+            CPPPATH += [os.path.join(cwd, 'src', 'yolo')]
+
+        src = app_src
+        src += Glob(model_src_glob)
+        if not use_handwriting_model:
+            src += Glob('./src/yolo/*.c')
+
+        group = DefineGroup('Applications', src, depend = [''], CPPPATH = CPPPATH)
+
+for d in list:
+    path = os.path.join(cwd, d)
+    if os.path.isfile(os.path.join(path, 'SConscript')):
+        group = group + SConscript(os.path.join(d, 'SConscript'))
+
+Return('group')

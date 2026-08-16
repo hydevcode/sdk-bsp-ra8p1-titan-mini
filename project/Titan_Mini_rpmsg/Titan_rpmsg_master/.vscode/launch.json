@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug CPU0 - flash master hex",
+            "executable": "${workspaceRoot}/rtthread.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "runToEntryPoint": "hal_entry",
+            "loadFiles": [
+                "${workspaceRoot}/rtthread.hex"
+            ],
+            "targetId": "R7KA8P1KF_CPU0",
+            "servertype": "jlink",
+            "device": "R7KA8P1KF_CPU0",
+            "interface": "jtag",
+            "armToolchainPath": "D:/rtthread/env-windows/tools/gnu_gcc/arm_gcc/mingw/bin",
+            "serverpath": "C:/Program Files/SEGGER/JLink_V876/JLinkGDBServerCL.exe"
+        
+        }
+    ]
+}

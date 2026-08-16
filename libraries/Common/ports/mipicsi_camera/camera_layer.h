@@ -88,7 +88,7 @@ typedef enum
 } bsp_camera_size_list_t;
 
 
-extern uint8_t  camera_capture_image_rgb565[CAMERA_ACTIVE_IMAGE_WIDTH  * CAMERA_ACTIVE_IMAGE_HEIGHT * CAMERA_IMAGE_BYTE_PER_PIXEL];
+extern uint8_t  camera_capture_image_rgb565[CAMERA_OV5640_RUNTIME_MAX_WIDTH * CAMERA_OV5640_RUNTIME_MAX_HEIGHT * CAMERA_IMAGE_BYTE_PER_PIXEL];
 extern uint32_t camera_capture_image_rgb565_size;
 
 #define CAM_RST_PIN         (BSP_IO_PORT_07_PIN_08)
@@ -98,10 +98,22 @@ fsp_err_t camera_init (bool use_test_mode);
 void      camera_user_callback_set(void (* p_callback)(void *));
 void      camera_image_buffer_initialize(void);
 
-void      camera_capture_start(void);
+fsp_err_t camera_capture_start(void);
+void      camera_capture_stream_pause(void);
+void      camera_capture_stream_resume(void);
+void      camera_capture_stream_pause_vin(void);
+void      camera_capture_stream_resume_vin(void);
+fsp_err_t camera_capture_scale_set(uint16_t width, uint16_t height);
+uint16_t  camera_capture_output_width_get(void);
+uint16_t  camera_capture_output_height_get(void);
+uint32_t  camera_capture_output_bytes_get(void);
+uint32_t  camera_capture_buffer_capacity_get(void);
 uint32_t  camera_data_ready_buffer_pointer_get(void);
+uint32_t  camera_frame_sequence_get(void);
+void      camera_frame_cache_discard(uint8_t const * p_buffer, uint32_t length);
 
 uint32_t      camera_capture_post_process(void);
+uint32_t      camera_processed_frame_get(uint8_t const ** pp_buffer, uint32_t * p_sequence);
 
 int OV5640_af_init(void);
 int OV5640_auto_focus(void);
